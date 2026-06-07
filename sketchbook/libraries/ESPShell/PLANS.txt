@@ -1,0 +1,27 @@
+Roadmap:
+
+1. Documentation is a bit outdated: new commands are missing, some screenshots are
+   too old and do not match real command output.
+
+    c) Make better docs on WiFi, add static NAT mapping commands
+    d) Update docs on sequences (modulation, eot, head and tail commands)
+    f) Add documentation for the "time" command
+    g) Review and update "uptime" docs
+    h) Review and update screenshots
+
+
+2.1 Sequences: add sequence capture (using RMT), captured sequence display and 
+   saving to a FS. (IR remote capture & playback) add sequence decode, based on
+   user-supplied alphabet ("one","zero","head" and "tail")
+
+3. Frequency meter: add support for start/stop pin (i.e. hardware, externally
+   controlled start/stop). This can improve accuracy: setting GPIO high/low 
+   from an PCNT interrupt handler is much faster than sending TaskNotification.
+
+
+5.3 Port a single-user, single-threaded simple FTP server - to be able to 
+   upload a premade filesystem (i.e. files and directories)
+
+7.4 Investigate possibility to cache numeric values of argv[], so subsequent access (i.e. pin X loop or alias)
+    will not spend time on q_atoi/q_atol/q_atof. We cache handler address according to the argv[0] for the same reason already. Why not
+    to cache all numerics?

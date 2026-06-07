@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <title>ESPShell : Переменные скетча</title>
+  <link rel="stylesheet" href="espshell.css">
+</head>
+<body>
+<p align=center><a href="index.ru.html"><img src="i/espshell_logo.jpg" alt="ESPShell для Arduino :: Доступ к переменным скетча" width="70%" height="70%" /></a></p>
+<h3 align=center><a href="Sketch_Variables.ru.html">[ На русском ]</a>&nbsp;&harr;&nbsp;<a href="Sketch_Variables.html">[ English ]</a></h3>
+<p>
+  <ul>
+    <li><a href="#variables">Переменные скетча</a></li>
+    <li><a href="#show">Просмотр переменных</a></li>
+    <li><a href="#set">Установка значений</a></li>
+    <li><a href="#conv">Преобразование чисел</a></li>
+  </ul>
+</p>
+
+<p><h2 id=variables><a href="#top">&#8686;</a>ПЕРЕМЕННЫЕ СКЕТЧА: РЕГИСТРАЦИЯ</h2></p>
+
+<p>
+ESPShell предоставляет API для регистрации и управления переменными скетча. Поддерживаются только простые типы C, такие как <i>unsigned/signed int</i>, <i>char</i>, <i>short</i>, <i>float</i>, а также указатели типа <i>void*</i>. Также поддерживаются массивы этих простых типов.
+</p><p>
+Чтобы переменная стала доступной в ESPShell, её необходимо <i>зарегистрировать</i>.
+</p><p>
+Для регистрации используется макрос <span class=func>convar_add()</span>. Также существуют специализированные макросы, такие как <span class=func>convar_addp()</span> для указателей и <span class=func>convar_adda()</span> для массивов.
+</p><p>
+Пример использования в Arduino-скетче: допустим, у нас есть три переменные, которые мы хотим сделать доступными в командной строке shell:
+</p><p>
+<pre>
+  static int some_variable;
+  unsigned char *pointer;
+  char array[10];
+
+  void setup() {
+    ...
+    convar_add(some_variable); &larr; Регистрация простой переменной
+    convar_addp(pointer);      &larr; Регистрация указателя
+    convar_adda(array);        &larr; Регистрация массива
+    ...
+  }
+</pre>
+</p><p>
+Другие доступные макросы: <b>convar_addap(Name)</b> — регистрация массива указателей, <b>convar_addpp(Name)</b> — регистрация указателя на указатель.
+</p>
+
+<p><h2 id=show><a href="#top">&#8686;</a>ПРОСМОТР ПЕРЕМЕННЫХ И ИХ ЗНАЧЕНИЙ</h2></p>
+
+<p>
+В приведённом выше примере регистрируются три типа переменных: целочисленная, указатель и массив. После регистрации с помощью соответствующих макросов <span class=func>convar_addX()</span>, эти переменные становятся доступными через shell с помощью команд <b>var <i>NAME</i></b> и <b>show memory <i>ADDRESS</i></b>.
+</p><p>
+Если команда <b>var</b> вызывается без аргументов, выводится список всех <i>зарегистрированных</i> переменных:
+</p><p><pre>
+    esp32#>var
+    % Sketch variables:
+    % Variable X name | sizeof(X) |     typeof(X)    |     Value
+    %-----------------+-----------+------------------+----------------
+    %           table |         4 |            int * |       0x3ffbdb88
+    %              a4 |         4 |          float * |       0x3ffbdbb4
+    %              a3 |         4 |            float |        10.000000
+    %              a2 |         4 |     unsigned int |                0
+    %              a1 |         1 |    unsigned char |               99
+    %              a0 |         4 |              int |              -99
+    %     tbl_min_len |         2 |   unsigned short |               16
+    %       bypass_qm |         4 |              int |                0
+    %       pcnt_unit |         4 |              int |                0
+    %    pcnt_channel |         4 |              int |                0
+    %ls_show_dir_size |         4 |              int |                1
+    esp32#>
+</pre>
+</p><p>
+Обрати внимание: для указателей и массивов отображается адрес, а не содержимое памяти. Чтобы разыменовать указатель или отобразить содержимое массива, используй <b>var <i>VAR_NAME</i></b>:
+</p><p>
+<pre>
+    esp32#>var a4
+    % float * a4 = 0x3ffbdbb4;  // Pointer to a 4-byte memory region
+    % a4[1] = {
+    %    10.000000, // a4[0]
+    % };
+</pre>
+</p><p>
+Другой пример:
+</p><p><pre>
+    esp32#>var table
+    % int * table = 0x3ffbdb88;  // Array of 10 elements (4 bytes each)
+    % int table[10] = {
+    %    1, // table[0]
+    %    2, // table[1]
+    %    3, // table[2]
+    %    4, // table[3]
+    %    5, // table[4]
+    %    6, // table[5]
+    %    7, // table[6]
+    %    8, // table[7]
+    %    9, // table[8]
+    %    0, // table[9]
+    % };
+</pre>
+</p><p>
+Чтобы обратиться к конкретному элементу массива, укажи индекс, как в языке C:
+</p><p><pre>
+    esp32#>var table[5]
+    % int table[5] = 6;
+    esp32#>
+</pre></p><p>
+Такой синтаксис можно использовать и для указателей. Использование индекса к переменной-указателю означает смещение указателя перед разыменованием. В таком случае ESPShell выводит предупреждение, так как не может определить допустимые границы памяти.
+</p><p>
+Ещё один пример:
+</p><p><pre>
+    esp32#>var a1
+    % unsigned char a1 = 99;
+    esp32#>
+</pre></p>
+
+<p><h2 id=set><a href="#top">&#8686;</a>УСТАНОВКА НОВОГО ЗНАЧЕНИЯ</h2></p>
+<p>
+Чтобы изменить значение переменной, используй команду <b>var <i>VARIABLE_NAME</i> <i>NEW_VALUE</i></b>.  
+Пример: изменим значение переменной <code>a1</code> на 88:
+</p><p><pre>
+    esp32#>var a1 88
+    esp32#>var a1
+    % unsigned char a1 = 88;  // use "var 88" see this number in hex, oct, bin etc
+    esp32#>
+</pre>
+</p><p>
+Выполняется базовая проверка типов: нельзя присвоить знаковое значение беззнаковой переменной, или значение с плавающей точкой — целочисленной. 
+Также невозможно изменить адрес массива, так как он фиксируется компоновщиком и не может быть изменён во время выполнения. Впрочем, если выполнить команду по установке значения массива, новое значение установится.
+Но это лишь для ESPShell: для скетча адрес массива остается неизменным. 
+</p>
+
+<p><h2 id=conv><a href="#top">&#8686;</a>ПРЕОБРАЗОВАНИЕ ЧИСЕЛ</h2></p>
+
+<p>
+Команда <b>var</b> также может использоваться для преобразования чисел между системами счисления. Если аргумент команды — число (десятичное, шестнадцатеричное, вещественное, восьмеричное или бинарное), ESPShell отображает таблицу с представлением числа в разных системах счисления, а также выполняет небезопасное C-подобное преобразование памяти. Это полезно для просмотра внутреннего представления отрицательных или вещественных чисел.
+</p><p>
+Пример:
+</p><p><pre>                          
+    esp32#>var 666
+    % "666" is a number, which can be written as:
+    % C-style cast of a memory content:
+    % unsigned : 666
+    %   signed : 666
+    % float    : 0.000000
+    % Same number in different bases:
+    % Hex      : 0x29a
+    % Octal    : 01232
+    % Binary   : 0b1010011010
+    esp32#>
+</pre></p><p>
+Или:
+</p><p><pre>
+    esp32#>var 666.666
+    % "666.666" is a number, which can be written as:
+    % C-style cast of a memory content:
+    % unsigned : 1143384736
+    %   signed : 1143384736
+    % float    : 666.666016
+    % Same number in different bases:
+    % Hex      : 0x4426aaa0
+    % Octal    : 010411525240
+    % Binary   : 0b1000100001001101010101010100000
+    esp32#>
+</pre></p><p>
+Или:
+
+</p><p><pre>
+    esp32#>var 0b111
+    % "0b111" is a number, which can be written as:
+    % C-style cast of a memory content:
+    % unsigned : 7
+    %   signed : 7
+    % float    : 0.000000
+    % Same number in different bases:
+    % Hex      : 0x7
+    % Octal    : 07
+    % Binary   : 0b111
+    esp32#>
+</pre>
+</p>
+</body>
+</html>

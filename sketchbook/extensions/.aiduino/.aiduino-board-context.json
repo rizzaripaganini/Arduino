@@ -1,0 +1,8 @@
+{
+  "currentBoard": "esp32:esp32:esp32da:UploadSpeed=921600,CPUFreq=240,FlashFreq=80,FlashMode=qio,FlashSize=4M,PartitionScheme=default,DebugLevel=none,LoopCore=1,EventsCore=1,EraseFlash=none",
+  "boardDetails": {
+    "fqbn": "esp32:esp32:esp32da:UploadSpeed=921600,CPUFreq=240,FlashFreq=80,FlashMode=qio,FlashSize=4M,PartitionScheme=default,DebugLevel=none,LoopCore=1,EventsCore=1,EraseFlash=none",
+    "lastUpdated": 1780239645719
+  },
+  "savedAt": 1780239645719
+}

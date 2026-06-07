@@ -1,0 +1,30 @@
+{
+  "version": "2.0",
+  "activeChat": "chat-1780241343224-c6u5z4zox",
+  "chats": [
+    {
+      "id": "chat-1780241343224-c6u5z4zox",
+      "title": "Melhore este arquivo Arduino c...",
+      "created": 1780241343224,
+      "lastUpdated": 1780241355878,
+      "messageCount": 4,
+      "workspacePath": "h:\\Arduino\\Projetos\\ping"
+    },
+    {
+      "id": "chat-1780240770352-d8semwlcu",
+      "title": "gostaria de uma saida  ping co...",
+      "created": 1780240770352,
+      "lastUpdated": 1780240880968,
+      "messageCount": 4,
+      "workspacePath": "h:\\Arduino\\Projetos\\ping"
+    },
+    {
+      "id": "chat-1780240261911-lqyp5wk3q",
+      "title": "complete o códico",
+      "created": 1780240261911,
+      "lastUpdated": 1780240372461,
+      "messageCount": 4,
+      "workspacePath": "h:\\Arduino\\Projetos\\ping"
+    }
+  ]
+}

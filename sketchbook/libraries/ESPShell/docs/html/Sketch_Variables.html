@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>ESPShell : Sketch Variables</title>
+  <link rel="stylesheet" href="espshell.css">
+  <meta charset="UTF-8">
+</head>
+<body>
+<p align=center><a href="index.html"><img src="i/espshell_logo.jpg" alt="ESPShell for Arduino :: Sketch Variables" width="70%" height="70%" /></a></p>
+<h3 align=center><a href="Sketch_Variables.ru.html">[ На русском ]</a>&nbsp;&harr;&nbsp;<a href="Sketch_Variables.html">[ English ]</a></h3>
+<p>
+  <ul>
+    <li><a href="#variables">Sketch Variables</a></li>
+    <li><a href="#show">Displaying Variables</a></li>
+    <li><a href="#set">Setting Values</a></li>
+    <li><a href="#conv">Number Conversion</a></li>
+  </ul>
+</p>
+
+<p id=variables><h2 id=wit><a href="#top">&#8686;</a>SKETCH VARIABLES: REGISTRATION</h2></p>
+
+<p>
+ESPShell provides an API to register and manipulate sketch variables. Supported types are limited to simple C types such as <i>unsigned/signed int</i>, <i>char</i>, <i>short</i>, <i>float</i>, and generic <i>void*</i> pointers. Arrays of these basic types are also supported.
+</p><p>
+To make a variable accessible from ESPShell, it must be <i>registered</i>.
+</p><p>
+Use the <span class=func>convar_add()</span> macro to register a variable. There are also specialized macros like <span class=func>convar_addp()</span> for pointers and <span class=func>convar_adda()</span> for arrays.
+</p><p>
+Example usage in an Arduino sketch: suppose we have three variables we want to expose to the shell:
+</p><p>
+<pre>
+  static int some_variable;
+  unsigned char *pointer;
+  char array[10];
+
+  void setup() {
+    ...
+    convar_add(some_variable); &larr; Register a simple variable
+    convar_addp(pointer);      &larr; Register a pointer
+    convar_adda(array);        &larr; Register an array
+    ...
+  }
+</pre>
+</p><p>
+Other available macros include: <b>convar_addap(Name)</b> - to register an array of pointers, and <b>convar_addpp(Name)</b> - to register a pointer to a pointer.
+</p>
+
+<p><h2 id=show><a href="#top">&#8686;</a>DISPLAYING VARIABLES AND VALUES</h2></p>
+
+<p>
+The code snippet above registers three variable types: an integer, a pointer, and an array. Once registered using the appropriate <span class=func>convar_addX()</span> macros, these variables can be accessed via the shell using the commands <b>var <i>NAME</i></b> and <b>show memory <i>ADDRESS</i></b>.
+</p><p>
+When executed without arguments, the <b>var</b> command lists all <i>registered</i> variables:
+</p><p><pre>
+    esp32#>var
+    % Sketch variables:
+    % Variable X name | sizeof(X) |     typeof(X)    |     Value
+    %-----------------+-----------+------------------+----------------
+    %           table |         4 |            int * |       0x3ffbdb88
+    %              a4 |         4 |          float * |       0x3ffbdbb4
+    %              a3 |         4 |            float |        10.000000
+    %              a2 |         4 |     unsigned int |                0
+    %              a1 |         1 |    unsigned char |               99
+    %              a0 |         4 |              int |              -99
+    %     tbl_min_len |         2 |   unsigned short |               16
+    %       bypass_qm |         4 |              int |                0
+    %       pcnt_unit |         4 |              int |                0
+    %    pcnt_channel |         4 |              int |                0
+    %ls_show_dir_size |         4 |              int |                1
+    esp32#>
+</pre>
+</p><p>
+Note that for pointers and arrays, their address is shown rather than the content. To dereference a pointer or view array contents, use <b>var <i>VAR_NAME</i></b>:
+</p><p>
+<pre>
+    esp32#>var a4
+    % float * a4 = 0x3ffbdbb4;  // Pointer to a 4-byte memory region
+    % a4[1] = {
+    %    10.000000, // a4[0]
+    % };
+</pre>
+</p><p>
+Another example:
+</p><p><pre>
+    esp32#>var table
+    % int * table = 0x3ffbdb88;  // Array of 10 elements (4 bytes each)
+    % int table[10] = {
+    %    1, // table[0]
+    %    2, // table[1]
+    %    3, // table[2]
+    %    4, // table[3]
+    %    5, // table[4]
+    %    6, // table[5]
+    %    7, // table[6]
+    %    8, // table[7]
+    %    9, // table[8]
+    %    0, // table[9]
+    % };
+</pre>
+</p><p>
+To access a specific array element, use an index, just like in C:
+</p><p><pre>
+    esp32#>var table[5]
+    % int table[5] = 6;
+    esp32#>
+</pre></p><p>
+This syntax can also be used to access memory pointed to by a pointer. When using an index on a pointer variable, ESPShell will display a warning, as it cannot determine valid memory bounds.
+</p><p>
+Here's another example of displaying a variable:
+</p><p><pre>
+    esp32#>var a1
+    % unsigned char a1 = 99;
+    esp32#>
+</pre></p>
+
+<p><h2 id=set><a href="#top">&#8686;</a>SETTING VARIABLE VALUES</h2></p>
+<p>
+To change a variable's value, use the command <b>var <i>VARIABLE_NAME</i> <i>NEW_VALUE</i></b>.  
+For example, to change <code>a1</code> to 88:
+</p><p><pre>
+    esp32#>var a1 88
+    esp32#>var a1
+    % unsigned char a1 = 88;  // Use "var 88" to view this number in hex, octal, binary, etc.
+    esp32#>
+</pre>
+</p><p>
+Some basic type checks are enforced. For example, you cannot assign a signed value to an unsigned variable or a floating-point value to an integer. Array values cannot be changed this way, as their address is fixed by the linker and cannot be modified at runtime.
+</p>
+
+<p><h2 id=conv><a href="#top">&#8686;</a>NUMBER BASE CONVERSION</h2></p>
+
+<p>
+Another use of the <b>var</b> command is number base conversion. If the argument passed to <b>var</b> is a number (decimal, hexadecimal, floating point, octal, or binary), ESPShell will display the value in multiple bases and perform an unsafe C-style memory cast. This is mainly useful to inspect how negative or floating-point numbers are represented in memory.
+</p><p>
+Example:
+</p><p><pre>                          
+    esp32#>var 666
+    % "666" is a number, represented as:
+    % C-style memory cast:
+    % unsigned : 666
+    %   signed : 666
+    % float    : 0.000000
+    % In different bases:
+    % Hex      : 0x29a
+    % Octal    : 01232
+    % Binary   : 0b1010011010
+    esp32#>
+</pre></p><p>
+Or:
+</p><p><pre>
+    esp32#>var 666.666
+    % "666.666" is a number, represented as:
+    % C-style memory cast:
+    % unsigned : 1143384736
+    %   signed : 1143384736
+    % float    : 666.666016
+    % In different bases:
+    % Hex      : 0x4426aaa0
+    % Octal    : 010411525240
+    % Binary   : 0b1000100001001101010101010100000
+    esp32#>
+</pre></p><p>
+Or:
+</p><p><pre>
+    esp32#>var 0b111
+    % "0b111" is a number, represented as:
+    % C-style memory cast:
+    % unsigned : 7
+    %   signed : 7
+    % float    : 0.000000
+    % In different bases:
+    % Hex      : 0x7
+    % Octal    : 07
+    % Binary   : 0b111
+    esp32#>
+</pre>
+</p>
+</body>
+</html>

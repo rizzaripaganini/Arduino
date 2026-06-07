@@ -1,0 +1,2607 @@
+/* 
+ * This file is a part of the ESPShell Arduino library (Espressif's ESP32-family CPUs)
+ *
+ * Latest source code can be found at Github: https://github.com/vvb333007/espshell/
+ * Stable releases: https://github.com/vvb333007/espshell/tags
+ *
+ * Feel free to use this code as you wish: it is absolutely free for commercial and 
+ * non-commercial, education purposes.  Credits, however, would be greatly appreciated.
+ *
+ * Author: Viacheslav Logunov <vvb333007@gmail.com>
+ */
+ 
+#if COMPILING_ESPSHELL
+
+// -- Shell commands handlers (prototypes) --
+//
+// These are called by espshell_command() processor in order to execute commands. Function names are pretty selfdescriptive:
+// command handler function names always start with "cmd_" and then follows with either command name (e.g. cmd_pin) or command 
+// directory + command name (e.g. cmd_files_write()).
+//
+// Handlers have access to user input via argc/argv mechanism. Return value is 0 if it was success, or contains an index of a failed
+// argument. Other return codes are in keywords_defs.h, see CMD_FAILED, CMD_SUCCESS.
+//
+// For the code simplicity, the success value is returned as 0, not as CMD_SUCCESS. If the return value is CMD_FAILED, then it is up to handler
+// to give an explanation of a problem. ESPShell prints error messages for other error codes and keeps silent for CMD_FAILED
+//
+// Handlers are associated with commands below, see "-- Shell Commands --" section below
+
+// Camera commands
+#if WITH_ESPCAM
+static int cmd_camera_if(int, char **);
+static int cmd_camera_gain(int, char **);
+static int cmd_camera_balance(int, char **);
+static int cmd_camera_exposure(int, char **);
+static int cmd_camera_qbcss(int, char **);
+static int cmd_camera_size(int, char **);
+static int cmd_camera_mode(int, char **);
+static int cmd_camera_capture(int, char **);
+static int cmd_camera_filesize(int, char **);
+static int cmd_camera_save(int, char **);
+static int cmd_camera_down(int, char **);
+static int cmd_camera_up(int, char **);
+static int cmd_camera_pinout(int, char **);
+#endif // WITH_ESPCAM
+
+//i2c commands
+static int cmd_i2c_if(int, char **);
+static int cmd_i2c_clock(int, char **);
+static int cmd_i2c_up(int, char **);
+static int cmd_i2c_down(int, char **);
+static int cmd_i2c_read(int, char **);
+static int cmd_i2c_write(int, char **);
+static int cmd_i2c_scan(int, char **);
+
+#if WITH_SPI
+// spi commands
+static int cmd_spi_if(int, char **);
+static int cmd_spi_clock(int, char **);
+static int cmd_spi_up(int, char **);
+static int cmd_spi_down(int, char **);
+static int cmd_spi_write(int, char **);
+#endif //WITH_SPI
+
+// uart commands
+static int cmd_uart_if(int, char **);
+static int cmd_uart_baud(int, char **);
+static int cmd_uart_tap(int, char **);
+static int cmd_uart_up(int, char **);
+static int cmd_uart_down(int, char **);
+static int cmd_uart_read(int, char **);
+static int cmd_uart_write(int, char **);
+
+#if WITH_FS
+// filesystem commands
+static int cmd_files_if(int, char **);
+static int cmd_files_mount0(int, char **);
+static int cmd_files_mount(int, char **);
+#  if WITH_SD
+static int cmd_files_mount_sd(int, char **);
+#  endif
+static int cmd_files_unmount(int, char **);
+static int cmd_files_cd(int, char **);
+static int cmd_files_ls(int, char **);
+static int cmd_files_rm(int, char **);
+static int cmd_files_mv(int, char **);
+static int cmd_files_cp(int, char **);
+static int cmd_files_write(int, char **);
+static int cmd_files_insdel(int, char **);
+static int cmd_files_mkdir(int, char **);
+static int cmd_files_cat(int, char **);
+static int cmd_files_touch(int, char **);
+static int cmd_files_format(int, char **);
+#endif  //WITH_FS
+
+// automation
+static int cmd_echo(int, char **);
+
+// system
+static int cmd_suspend(int, char **);
+static int cmd_priority(int, char **);
+static int cmd_resume(int, char **);
+static int cmd_kill(int, char **argv);
+static int cmd_cpu(int, char **);
+static int cmd_uptime(int, char **);
+static int NORETURN cmd_reload(int, char **);
+static int cmd_nap(int, char **);
+static int cmd_nap_alarm(int, char **);
+
+// pin-realated commands: pwm, pulse counter and pin
+static int cmd_pwm(int, char **);
+static int cmd_count(int, char **);
+static int cmd_pin(int, char **);
+
+// RMT sequences
+static int cmd_seq_if(int, char **);
+static int cmd_seq_eot(int argc, char **argv);
+static int cmd_seq_modulation(int argc, char **argv);
+static int cmd_seq_zeroone(int argc, char **argv);
+static int cmd_seq_tick(int argc, char **argv);
+static int cmd_seq_bits(int argc, char **argv);
+static int cmd_seq_levels(int argc, char **argv);
+static int cmd_seq_bytes(int argc, char **argv);
+static int cmd_seq_loop(int argc, char **argv);
+static int cmd_seq_save(int argc, char **argv);
+static int cmd_seq_decode(int argc, char **argv);
+static int cmd_seq_capture(int argc, char **argv);
+static int cmd_seq_profile(int argc, char **argv);
+
+// sketch variables
+static int cmd_var(int, char **);
+static int cmd_var_show(int, char **);
+
+// alias/file execution
+static int cmd_exec(int, char **);
+// if/every
+#if WITH_ALIAS
+static int cmd_if(int, char **);
+#endif
+
+// The following group of show handlers are used in a dedicated command directory "show".
+// It is a hidden directory: we reference it by argv[1] of the show command
+//
+// Master "show" handler. All "show" variants are handled here
+static int cmd_show(int, char **);
+
+// All other "show" handlers
+#if WITH_WIFI
+static int cmd_show_wifi(int, char **);
+#endif
+static int cmd_show_nap(int, char **);
+static int cmd_show_time(int, char **);
+static int cmd_show_iomux(int, char **);
+static int cmd_show_version(int, char **);
+static int cmd_show_uart(int, char **);
+static int cmd_show_tasks(int, char **);
+static int cmd_show_cpuid(int, char **);
+static int cmd_show_pwm(int, char **);
+static int cmd_show_pin(int, char **);
+static int cmd_show_counters(int, char **);
+static int cmd_show_sequence(int, char **);
+#if WITH_FS
+static UNUSED int cmd_show_mount(int, char **);
+#endif
+static int cmd_show_memory(int, char **);
+#if WITH_CAMERA
+static UNUSED int cmd_show_camera(int, char **);
+#endif
+#if WITH_ALIAS
+static UNUSED int cmd_show_alias(int, char **);
+static UNUSED int cmd_show_ifs(int, char **);
+#endif
+#if WITH_DEVEL
+static UNUSED int cmd_show_subdirs(int, char **);
+#endif
+
+// common entries
+static int cmd_exit(int, char **);
+#if WITH_HELP
+static int cmd_question(int, char **);
+#endif
+
+// hidden commands, misc.c
+static int cmd_history(int, char **);
+#if WITH_COLOR
+static int cmd_colors(int, char **);
+#endif
+static int cmd_tty(int, char **);
+static int cmd_hostid(int, char **);
+
+// Alias commands
+#if WITH_ALIAS
+static int cmd_alias_if(int, char **);
+static int cmd_alias_quit(int, char **);
+static int cmd_alias_list(int, char **);
+static int cmd_alias_delete(int, char **);
+static int cmd_alias_asterisk(int, char **);
+#endif
+
+#if WITH_TIME
+static int cmd_time(int, char **);
+#endif
+
+#if WITH_WIFI
+static int cmd_wifi_storage(int , char **);
+static int cmd_wifi_if(int, char **);
+static int cmd_wifi_up(int, char **);
+static int cmd_wifi_down(int, char **);
+static int cmd_wifi_scan(int, char **);
+static int cmd_wifi_mac(int, char **);
+static int cmd_wifi_hostname(int, char **);
+static int cmd_wifi_ip_address(int, char **);
+static int cmd_wifi_natp(int, char **);
+static int cmd_wifi_ntp(int, char **);
+static int cmd_wifi_dhcp(int, char **);
+static int cmd_wifi_kick(int, char **);
+#endif
+
+// NVS editor/viewer
+#if WITH_NVS
+static int cmd_nvs_if(int, char **);
+static int cmd_nvs_cd(int, char **);
+static int cmd_nvs_ls(int, char **);
+static int cmd_nvs_rm(int, char **);
+static int cmd_nvs_set(int, char **);
+static int cmd_nvs_new(int, char **);
+static int cmd_nvs_dump(int, char **);
+#  if WITH_FS
+static int cmd_nvs_export(int, char **);
+#  endif
+#endif
+
+// User command handler. Implemented through weak function call
+// see espshell.h / SHELL_USER_HANDLER macro and examples/shell_user_handler/
+//
+// Implements command "misc ARG1 ARG2 ... ARGn"
+//
+static int  cmd_misc(int argc, char **argv);
+
+// Use localized version?
+#ifdef WITH_LANG
+#  include "lang/keywords_ru.inc"
+#else
+// -- Commands and Subdirectories --
+//
+// ESPShell commands are defined as entries in the /keywords_.../ arrays.  
+// Each entry starts and ends with "{" and "}" braces.  
+// The command keyword, its handler function, and the expected number of arguments
+// are placed on the same line as the opening brace.  
+//
+// Help text lines (/full/ and /brief/) are wrapped in the HELPK macro, which expands
+// to empty strings if ESPShell is compiled with the help system disabled
+// (see the WITH_HELP flag in espshell.h).
+//
+// Several keyword arrays (sometimes called "command trees" or "subdirectories") are defined:
+//
+// keywords_alias    : Alias editor  
+// keywords_uart     : UART commands  
+// keywords_iic      : I2C commands  
+// keywords_spi      : Do not use  
+// keywords_sequence : Pulse generator commands  
+// keywords_files    : Filesystem commands  
+// keywords_main     : Main command directory  
+// keywords_camera   : ESP Camera commands  
+// keywords_wifi     : Dummy tree, used only to highlight the "wifi" command  
+// keywords_ap       : WiFi AP  
+// keywords_sta      : WiFi STA  
+//
+// Switching between arrays is done via the change_command_directory() function.  
+// To create a new command tree, use the "uart" keywords below as a template.  
+// Inline comments explain the syntax.
+//
+//
+// UART commands.  
+// These become available after executing "uart 2" (or any other UART interface).  
+// This subdirectory is the recommended template for creating other command trees.  
+//
+KEYWORDS_DECL(uart) {   // Declares the "uart" command directory.
+                       
+
+  KEYWORDS_BEGIN        // Optional. Inserts common commands like "?" or "help"
+  // Normal commands:
+  // { "command_name", handler_func, number_of_arguments, HELPK("Full help"), HELPK("Brief description") },
+  //
+  // Help pages only, no action:
+  // { "command_name", HELP_ONLY, HELPK("Full help"), HELPK("Brief description") },
+  //
+  // Command is hidden from "?" but can be executed (action only, no help pages):
+  // { "command_name", handler_func, HIDDEN_KEYWORD },
+  //
+
+  // Command "up", requires at least 3 arguments:
+  { "up", cmd_uart_up, 3,
+    HELPK("% \"<b>up</> <i>RX TX SPEED</> <o>[BITS] [no|even|odd] [1|1.5|2]</>\"\r\n" 
+          "%\r\n"
+          "% Initialize an UART interface on pins RX/TX, baudrate SPEED\r\n"
+          "% <i>RX</>    - Pin to use as RX\r\n"
+          "% <i>TX</>    - Pin to use as TX\r\n"
+          "% <i>SPEED</> - 9600, 115200 or any other standart baudrate\r\n"
+          "% Three optional parameters are:\r\n"
+          "%  <o>BITS</>      - Number of data bits: 5,6,7 or 8. Default is 8\r\n"
+          "%  Parity    - \"<o>no</>\", \"<o>even</>\" or \"<o>odd</>\"\r\n"
+          "%  Stop bits - 1,2 or 1.5 stop bits\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>up 18 19 115200</> - Setup an UART on pins rx=18, tx=19, 115200 baud\r\n"
+          "%   <i>up 18 19 115200 <i>8 even 1.5</> - Eight bits, 1.5 stopbits, even parity" ),
+    HELPK("Initialize uart (pins/speed)") },
+
+    // Variants of "up" with 4,5 and 6 arguments: same handler
+    { "up", cmd_uart_up, 4, HIDDEN_KEYWORD },
+    { "up", cmd_uart_up, 5, HIDDEN_KEYWORD },
+    { "up", cmd_uart_up, 6, HIDDEN_KEYWORD },
+
+    // TODO: this is a workaround to catch "up", not "uptime". Should generate "missing argument error"
+    { "up", cmd_uart_up, 0, HIDDEN_KEYWORD },
+
+  { "baud", cmd_uart_baud, 1,
+    HELPK("% \"<b>baud</> <i>SPEED</>\"\r\n"
+          "%\r\n"
+          "% Set speed for the uart (uart must be initialized)\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>baud 115200</> - Set uart baud rate to 115200"),
+    HELPK("Set baudrate") },
+
+  // Command with no arguments:
+  { "down", cmd_uart_down, NO_ARGS,
+    HELPK("% \"<b>down</>\"\r\n"
+          "%\r\n"
+          "% Shutdown interface, detach pins"),
+    HELPK("Shutdown") },
+
+  { "show", cmd_show_uart, NO_ARGS,
+    HELPK("% \"<b>show</>\"\r\n"
+          "%\r\n"
+          "% Display UART parameters"),
+    HELPK("Show settings") },
+
+  { "read", cmd_uart_read, NO_ARGS,
+    HELPK("% \"<b>read</>\"\r\n"
+          "%\r\n"
+          "% Read bytes (available) from uart interface X"),
+    HELPK("Read data from UART") },
+
+  { "tap", cmd_uart_tap, NO_ARGS,
+    HELPK("% \"<b>tap</>\r\n"
+          "%\r\n"
+          "% Bridge the UART IO directly to/from shell\r\n"
+          "% User input will be forwarded to uart X;\r\n"
+          "% Anything UART X sends back will be forwarded to the user"),
+    HELPK("Talk to connected device") },
+
+  // Command that accepts any number of arguments, including zero.
+  // If you have several entries with the same command name (i.e. a group), which only differ in their
+  // "required arguments number", then the MANY_ARGS entry must be the last entry in the group:
+  // Example:
+  // {"write", ... , 1,          <--- called on "write ARG"
+  // {"write", ... , 3,          <--- called on "write ARG ARG ARG"
+  // {"write", ... , MANY_ARGS,  <--- last entry in the "write" group, called on all other "write" variants
+  //
+  // Doing it like this:
+  //
+  // {"write", ... , 1,          <--- called on "write ARG"
+  // {"write", ... , MANY_ARGS,
+  // {"write", ... , 3,          <--- called on "write ARG ARG ARG"
+  //
+  // will block 3-arg variant from executing. 
+  //
+    
+  //
+  { "write", cmd_uart_write, MANY_ARGS,
+    HELPK("% \"<b>write</> <i>TEXT</>\"\r\n"
+          "%\r\n"
+          "% Send an ascii/hex string(s) to UART interface\r\n"
+          "% <b>TEXT</> can include spaces, escape sequences: \\n, \\r, \\\\, \\t and \r\n"
+          "% hexadecimal numbers \\AB (A and B are hexadecimal digits)\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>write ATI\\n\\rMixed\\20Text and \\20\\21\\ff</>"),
+    HELPK("Send bytes over this UART") },
+
+  // KEYWORDS_END contains common entries (like "exit") and a NULL entry at the very end
+  // If this part is omitted  then NULL entry must be declared manually (see "alias" directory
+  // at the beghinning of this file)
+  KEYWORDS_END
+};
+
+// Final step: register our command tree.
+// Skipping of this step does not affect espshell operation (affects colors in command "?" display only)
+KEYWORDS_REG(uart);
+
+//I2C subderictory keywords
+//
+KEYWORDS_DECL(iic) {
+
+  KEYWORDS_BEGIN
+
+  { "up", cmd_i2c_up, 3,
+    HELPK("% \"<b>up</> <i>SDA SCL CLOCK</>\"\r\n"
+          "%\r\n"
+          "% Initialize I2C interface X, use pins SDA/SCL, clock rate CLOCK\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>up 21 22 100000</> - enable i2c at pins sda=21, scl=22, 100kHz clock"),
+    HELPK("Initialize interface (pins and speed)") },
+
+  // TODO: workaround against "uptime"
+  { "up", cmd_i2c_up, 0, HIDDEN_KEYWORD },
+
+  { "clock", cmd_i2c_clock, 1,
+    HELPK("% \"<b>clock</> <i>SPEED</>\"\r\n"
+          "%\r\n"
+          "% Set I2C master clock (i2c must be initialized)\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>clock 100000</> - Set i2c clock to 100kHz"),
+    HELPK("Set clock") },
+
+  { "scan", cmd_i2c_scan, NO_ARGS,
+    HELPK("% \"<b>scan</>\"\r\n"
+          "%\r\n"
+          "% Scan I2C bus for devices. (i2c must be initialized)"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>scan</> - Scan I2C bus"),
+
+    HELPK("Scan i2c bus for devices") },
+
+  { "write", cmd_i2c_write, MANY_ARGS,
+    HELPK("% \"<b>write</> <i>ADDR D1<i> [<o>D2 ... Dn</>]</>\"\r\n"
+          "%\r\n"
+          "% Write bytes D1..Dn (hex values) to address ADDR on I2C bus X\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>write 0x57 0 0xff</> - write 2 bytes to address 0x57: 0 and 255"),
+    HELPK("Send bytes to the device") },
+
+  { "read", cmd_i2c_read, 2,
+    HELPK("% \"<b>read</> <i>ADDR SIZE</></>\"\r\n"
+          "%\r\n"
+          "% Read SIZE bytes from a device at address ADDR\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>read 0x68 7</> - read 7 bytes from device address 0x68"),
+    HELPK("Read data from an I2C device") },
+
+  { "down", cmd_i2c_down, NO_ARGS,
+    HELPK("% \"<b>down</>\"\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>down</> - Deinitialize I2C interface"),
+    HELPK("Shutdown i2c interface") },
+
+
+  KEYWORDS_END
+};
+KEYWORDS_REG(iic)
+
+#if WITH_SPI
+//SPI subderictory keywords
+//No use cases so far, so it is disabled by default
+KEYWORDS_DECL(spi) {
+
+  KEYWORDS_BEGIN
+
+  { "up", cmd_spi_up, 3,
+    HELPK("% \"<b>up</> <i>MOSI MISO CLK</>\"\r\n"
+          "%\r\n"
+          "% Initialize SPI interface in MASTER mode, use pins MOSI/MISO/CLK\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>up 23 19 18</> - Initialize SPI at pins 23,19,18"),
+    HELPK("Initialize interface") },
+
+  { "up", cmd_spi_up, 0, HIDDEN_KEYWORD },
+
+  { "clock", cmd_spi_clock, 1,
+    HELPK("% \"<b>clock</> <i>SPEED</>\"\r\n"
+          "%\r\n"
+          "% Set SPI master clock (SPI must be initialized)\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>clock 1000000</> - Set SPI clock to 1 MHz"),
+    HELPK("Set clock") },
+
+  { "write", cmd_spi_write, MANY_ARGS,
+    HELPK("% \"<b>write</> <i>CHIP_SELECT</> <g>D1</> [<o>D2 D3 ... Dn</>]\"\r\n"
+          "%\r\n"
+          "% Write bytes D1..Dn (hex values) to SPI bus whicle setting CHIP_SELECT pin low\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>write 4 0 0xff</> - write 2 bytes, CS=4"),
+    HELPK("Send bytes to the device") },
+
+
+  { "down", cmd_spi_down, NO_ARGS,
+    HELPK("% \"<b>down</>\"\r\n"
+          "%\r\n"
+          "% Shutdown SPI interface X"),
+    HELPK("Shutdown SPI interface") },
+
+
+  KEYWORDS_END
+};
+KEYWORDS_REG(spi)
+#endif //WITH_SPI
+
+//RMT (sequence) subderictory keywords
+//
+KEYWORDS_DECL(sequence) {
+
+  KEYWORDS_BEGIN
+
+  { "tick", cmd_seq_tick, 1,
+    HELPK("% \"<b>tick</> <i>TIME</>\"\r\n"
+          "%\r\n"
+          "% Set the sequence tick time: defines a resolution of a pulse sequence.\r\n"
+          "% Expressed in microseconds, can be anything between 0.0125 and 3.2\r\n"
+          "%\r\n"
+          "% Every duration period (commands one,zero,head,tail,levels) is expressed\r\n"
+          "% in ticks, not in microseconds.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>tick 0.1</> - set resolution to 0.1 microsecond (i.e. 1 tick = 0.1 usec)"),
+    HELPK("Set resolution") },
+
+  { "zero", cmd_seq_zeroone, 2,
+    HELPK("% \"<b>zero</> <i>LEVEL/DURATION</> [<o>LEVEL2/DURATION2</>]\"\r\n"
+          "%\r\n"
+          "% Defines logic \"0\"\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>zero 0/50</>      - 0 is a level: LOW for 50 ticks\r\n"
+          "%   <i>zero 1/50 0/20</> - 0 is a pulse: HIGH for 50 ticks, then LOW for 20 ticks"),
+    HELPK("Define a zero") },
+
+  { "zero", cmd_seq_zeroone, 1, HIDDEN_KEYWORD },  //1 arg command
+
+  { "one", cmd_seq_zeroone, 2,
+    HELPK("% \"<b>one</> <i>LEVEL/DURATION</> [<o>LEVEL2/DURATION2</>]\"\r\n"
+          "%\r\n"
+          "% Defines logic \"1\"\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>one 1/50</>       - 1 is a level: HIGH for 50 ticks\r\n"
+          "%   <i>one 1/50 0/20</>  - 1 is a pulse: HIGH for 50 ticks, then LOW for 20 ticks"),
+    HELPK("Define an one") },
+
+  { "one", cmd_seq_zeroone, 1, HIDDEN_KEYWORD },  //1 arg command
+
+  { "head", cmd_seq_zeroone, 2,
+    HELPK("% \"<b>head L/D L/D</>\"\r\n"
+          "%\r\n"
+          "% Symbol, transmitted before the main data stream"), HELPK("Sequence header") },
+
+  { "tail", cmd_seq_zeroone, 1,
+    HELPK("% \"<b>tail L/D</>\"\r\n"
+          "%\r\n"
+          "% Symbol, transmitted after the main data stream"), HELPK("Sequence trailer") },
+
+
+  { "bits", cmd_seq_bits, 1,
+    HELPK("% \"<b>bits</> <i>STRING</>\"\r\n"
+          "%\r\n"
+          "% A bit pattern to be used as a sequence. STRING must contain only 0s and 1s\r\n"
+          "% Overrides previously set \"levels\" and \"bytes\"commands\r\n"
+          "% See commands \"one\" and \"zero\" to define \"1\" and \"0\"\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>bits 11101000010111100</>  - 17 bit sequence"),
+    HELPK("Set bits to transmit") },
+
+  { "bytes", cmd_seq_bytes, MANY_ARGS,
+    HELPK("% \"<b>bytes</> TEXT\"\r\n"
+          "%\r\n"
+          "% A byte pattern to be used as a sequence. Text or hex bytes\r\n"
+          "% Overrides previously set \"levels\" and \"bits\" commands\r\n"
+          "% See commands \"one\" and \"zero\" to define \"1\" and \"0\"\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>bytes \\a9\\18\\8f\\0f\\cd\\15</>  - 6-byte sequence\r\n"
+          "%   <i>bytes Hello\\20World\\20!</>  - Mixed hex bytes and ASCII"),
+    HELPK("Set bytes to transmit") },
+
+
+  { "levels", cmd_seq_levels, MANY_ARGS,
+    HELPK("% \"<b>levels</> <i>L1/D1</> [<o>L2/D2 ... Ln/Dn</>]\"\r\n"
+          "%\r\n"
+          "% A bit pattern to be used as a sequnce. L is either 1 or 0 and \r\n"
+          "% D is the duration measured in ticks [0..32767] (see \"tick\" command) \r\n"
+          "% Overrides previously set \"bits\" and \"bytes\" commands\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "% <i>levels 1/50 0/20 1/100 0/500</>  - HIGH 50 ticks, LOW 20, HIGH 100\r\n"
+          "%                                          and 0 for 500 ticks\r\n"
+          "% <i>levels 1/32767 1/17233 0/32767 0/7233</> - HIGH for 50000 ticks,\r\n"
+          "%                                                  LOW for 40000 ticks"),
+    HELPK("Set levels to transmit") },
+
+  { "modulation", cmd_seq_modulation, 3,
+    HELPK("% \"<b>modulation</> <i>FREQ</> [<o>DUTY</> [<o>low|high</>] ]\"\r\n"
+          "% \"<b>modulation</> <i>off</>\"\r\n"
+          "%\r\n"
+          "% Enables/disables an output signal modulation with frequency FREQ\r\n"
+          "% Optional parameters are: DUTY (from 0 to 1) and LEVEL (either high or low)\r\n"
+          "% Typical IR receivers use 38kHz, 33% duty cycle carrier, high level is modulated\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>modulation 38000</>         - modulate all 1s with 38kHz, 33% duty cycle\r\n"
+          "%   <i>modulation 38000 0.5 low</> - modulate all 0s with 38kHz, 50% duty cycle\r\n"
+          "%   <i>modulation off</>           - disable modulation\r\n"
+          "%   <i>modulation 0</>             - disable modulation"),
+    HELPK("Enable/disable modulation") },
+  
+  { "modulation", cmd_seq_modulation, 2, HIDDEN_KEYWORD },
+  { "modulation", cmd_seq_modulation, 1, HIDDEN_KEYWORD },
+
+  { "eot", cmd_seq_eot, 1,
+    HELPK("% \"<b>eot</> <i>high|low</>\"\r\n"
+          "%\r\n"
+          "% End of transmission: pull the line high or low at the\r\n"
+          "% end of a sequence. Default is \"low\""),
+    HELPK("End-of-Transmission pin state") },
+
+  { "loop", cmd_seq_loop, MANY_ARGS
+  
+  ,
+    HELPK("% \"<b>loop</> [<o>NUM</>]\"\r\n"
+          "%\r\n"
+          "% Loop sequence NUM times or infinitely (no arguments)\r\n"
+          "% If NUM is >1 then sequence will be looped for NUM times (in hardware)\r\n"
+          "% To disable looping, set loop count to \"1\"\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>loop</>     : Loop infinitely\r\n"
+          "%   <i>loop 5</>   : Loop 5 times\r\n"
+          "%   <i>loop 1</>   : Disable looping\r\n"
+          "%   <i>loop off</> : Disable looping"),
+    HELPK("Sequence looping") },
+
+  { "show", cmd_show_sequence, NO_ARGS,
+    HELPK("% \"<b>show</>\"\r\n"
+          "%\r\n"
+          "% Display <u>this</> sequence; Shortcut for \"show sequence NUM\""), HELPK("Show sequence") },
+
+  // we have "save" but we don't have "load" here: the "load" command is a global command "exec" which simply
+  // reads text files line by line and executes them until any errors are detected
+  // This allows for modules (e.g. sequence, alias, ifcond, ...) to save their current configuration to a
+  // text file for later execution. Saved files is a shell script.
+#if WITH_FS  
+  { "save", cmd_seq_save, 1,
+    HELPK("% \"<b>save /FILE_NAME</>\"\r\n"
+          "%\r\n"
+          "% NOTE: filesystem must be mounted prior to use of this feature\r\n"
+          "% (see \"files\" command and commands inside the \"files\" group)\r\n"
+          "%\r\n"
+          "% Save <u><b>this</> sequence in/from a text file; Text file can be modified and\r\n"
+          "% its content is loaded back (see global \"exec\" command), or copy/pasted to the\r\n"
+          "% command line. Captured sequences (see \"capture\") also can be saved"), 
+    HELPK("Save sequence to a file") },
+#endif // WITH_FS    
+#if NOT_YET
+  { "decode", cmd_seq_decode, 1,
+    HELPK("% \"<b>decode [TOLERANCE]</>\"\r\n"
+          "%\r\n"
+          "% Attempt to decode \"levels\" to a bit string according to pulse descriptions\r\n"
+          "% in \"one\" and \"zero\" alphabet, allowing for timing characteristics to be\r\n"
+          "% around desired values +/- TOLERANCE percents (Default value is 20%%)\r\n"
+          "%\r\n"
+          "% Sequence must be initialized: either manually, by \"capture\" command,\r\n"
+          "% or loaded from the file by global \"exec\" command.\r\n"
+          "% <u>Example:</>\r\n"
+          "%   <i>profile nec</> : load NEC protocol preset\r\n"
+          "%   <i>decode 10</>   : decode as NEC protocol, (+- 10% for timing characteristics is ok)\r\n"
+          "% If the pulse we are expecting is 100uS long, then any pulse from 90 to 110 uS\r\n"
+          "% will match"), HELPK("Sequence decode") },
+
+  { "decode", cmd_seq_decode, 0, HIDDEN_KEYWORD },
+
+  { "profile", cmd_seq_profile, 1,
+    HELPK("% \"<b>profile <i>nec|lg|lg32|samsung|1wire|neopixel|none</>\"\r\n"
+          "%\r\n"
+          "% Load presets for different IR protocols:\r\n"
+          "% Loads header and trailer, modulation parameters, \"one\" \r\n"
+          "% and \"zero\" definitions, tick rate"
+          ),
+    HELPK("Timing profiles") },
+#endif
+  { "capture", cmd_seq_capture, MANY_ARGS,
+    HELPK("% \"<b>capture PIN [NUM_SYMBOLS | all] [TIMEOUT_MS]</>\"\r\n"
+          "%\r\n"
+          "% Capture sequence of pulses on GPIO# PIN, to <u><b>this</> sequence\r\n"
+          "% Once \"one\" and \"zero\" alphabet is set, an attempt to decode\r\n"
+          "% the bit string could be made (see \"decode\" command)"),
+    HELPK("Sequence capture") },
+  
+
+  KEYWORDS_END
+};
+KEYWORDS_REG(sequence)
+
+
+
+#if WITH_WIFI
+// Dummy group "wifi".
+// "wifi ap|sta" switches current command directory to either "ap" or "sta", but never to the "wifi"
+// It is here purely for colorer and does not affect espshell operation
+KEYWORDS_DECL(wifi) { 
+  { NULL, NULL, 0, NULL, NULL }
+};
+KEYWORDS_REG(wifi)
+
+// "wifi sta" command subdirectory
+// WiFi STA
+KEYWORDS_DECL(sta) {
+
+  KEYWORDS_BEGIN
+
+  { "up", cmd_wifi_up, NO_ARGS,
+    HELPK("% \"<b>up SSID|BSSID [PASSWORD] [reconnect]</>\"\r\n"
+          "% \"<b>up</>\"\r\n" 
+          "%\r\n"
+          "% Connect to the AP (SSID or BSSID) using password PASSWORD. Configuration\r\n"
+          "% (e.g., IP, DHCP, NTP) better be done <u>before</>. If there is a system WiFi\r\n"
+          "% configuration loaded (from NVS/user sketch) the short form of \"up\" (without arguments)\r\n"
+          "% can be used\r\n"
+          "%\r\n"
+          "% Use \"scan\" command to find out SSIDs and BSSIDs\r\n"
+          "% Use \"show wifi sta\" command show system STA WiFi config\r\n"
+          "% Use \"wifi storage flash\" to enable config auto-save\r\n"
+          "%\r\n"
+          "%<u>Examples</>:\r\n"
+          "%  up \"Home Network\" jfhod786    - connect using SSID and a password\r\n"
+          "%  up \"Home Network\" \"\" auto   - connect using SSID, no password, reconnect\r\n"
+          "%  up 0044:ff55:02ae jfhod786 auto - connect using BSSID, auto reconnect\r\n"
+          "%  up                              - connect using system/sketch config\r\n"
+          "%"),
+    HELPK("Initialize and start WiFi interface") },
+
+    { "up", cmd_wifi_up, MANY_ARGS, HIDDEN_KEYWORD },
+
+
+  { "down", cmd_wifi_down, NO_ARGS,
+    HELPK("% \"<b>down</>\"\r\n" 
+          "%\r\n"
+          "% Stop & shutdown a WiFi interface"),
+    HELPK("Shutdown WiFi interface") },
+
+  { "scan", cmd_wifi_scan, MANY_ARGS,
+    HELPK("% \"<b>scan</> [<o>active</> | <o>passive</> | <o>bssid AABB:CCDD:EEFF</>]*\"\r\n" 
+          "%\r\n"
+          "% Scan and display available networks.\r\n"
+          "% Performs passive or active scan (default is \"active\") and displays\r\n"
+          "% found networks or, if \"bssid\" is set, displays detailed information on\r\n"
+          "% specific Access Point\r\n"
+          "% <u>Examples</>:\r\n"
+          "% <i>scan</>                          : Active scan (AP probe)\r\n"
+          "% <i>scan passive</>                  : Passive scan (AP sniff)\r\n"
+          "% <i>scan bssid 0001:2233:4455</>     : Active scan of specific AP\r\n"
+          "% <i>scan b 0001:2233:4455 passive</> : Passive scan of specific AP"),
+    HELPK("WiFi scan") },
+
+  { "ntp", cmd_wifi_ntp, MANY_ARGS,
+    HELPK("% \"<b>ntp</> [<o>dhcp</>|<o>HOST</>] [<o>enable</>|<o>disable</>]</>\"\r\n" 
+          "%\r\n"
+          "% SNTP client configuration:\r\n"
+          "%  <i>dhcp</>    - Obtain SNTP servers from DHCP reply\r\n"
+          "%  <i>HOST</>  - Use SNTP server HOST (ip or hostname)\r\n"
+          "%  <i>disable</> - disable SNTP\r\n"
+          "%  <i>enable</>  - enable SNTP\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   ntp dhcp         - use DHCP to obtain NTP servers\r\n"
+          "%   ntp dhcp enable  - use DHCP and enable SNTP client\r\n"
+          "%   ntp pool.ntp.org - use pool.ntp.org as NTP server\r\n"
+          "%   ntp 2.2.2.2 dhcp - Use DHCP and static server addresses\r\n"
+          "%   ntp disable      - Disable SNTP client\r\n"
+          "%"
+          ),
+    HELPK("SNTP settings") },
+
+  { "mac", cmd_wifi_mac, 1,
+    HELPK("% \"<b>mac</> <i>MAC-ADDRESS</>|default\"\r\n" 
+          "%\r\n"
+          "% Set interface MAC address:\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   mac 0001123456af\r\n"
+          "%   mac 00:01:12:34:56:af\r\n"
+          "%   mac 0001:1234:56af"),
+    HELPK("MAC settings (STAtion)") },
+
+  { "hostname", cmd_wifi_hostname, 1,
+    HELPK("% \"<b>hostname</> <i>TEXT</>\r\n" 
+          "%\r\n"
+          "% Set host name (max 31 symbols, alphanumerics and dots are allowed)\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   hostname mars.local\r\n"
+          "%   hostname Moon2"),
+    HELPK("Host name") },
+
+  { "hostname", cmd_wifi_hostname, NO_ARGS, HIDDEN_KEYWORD},
+
+  { "ip", cmd_wifi_ip_address, MANY_ARGS,
+    HELPK("% \"<b>ip address</> dhcp\"\r\n" 
+          "% \"<b>ip address</> A.B.C.D/PREFIX [gw <o>A.B.C.D</>] [dns <o>A.B.C.D</> [<o>A.B.C.D</>]]\"\r\n" 
+          "%\r\n"
+          "% Set interface IP address to use: static or DHCP\r\n"
+          "% <i>A.B.C.D/PREFIX</>        : IP address and the prefix length e.g.\r\n"
+          "%                            \"192.168.0.1/24\" is 192.168.0.1 and a netmask\r\n"
+          "%                            \"255.255.255.0\" (24 bit mask)\r\n"
+          "% <i>dhcp</>                  : use DHCP to obtain IP information\r\n"
+          "% <i>gw A.B.C.D</>            : specify default gateway\r\n"
+          "% <i>dns A.B.C.D [A.B.C.D]</> : specify DNS server(s)\r\n"
+          "%\r\n"
+          "%<u>Examples</>:\r\n"
+          "%   <i>ip address dhcp</>            : Obtain address automatically\r\n"
+          "%   <i>ip address 192.168.0.2/24</>  : Static IP with 255.255.255.0 mask\r\n"
+          "%   <i>ip ad 1.1.0.2/8 dns 8.8.8.8</>: Static IP and DNS\r\n"
+          "%   <i>ip ad dhcp dns 8.8.8.8</>     : Dynamic IP, static DNS\r\n"
+          "%   <i>ip ad dhcp gw 192.168.0.1</>  : Dynamic IP address, static gateway</>\r\n"
+          "%"),
+    HELPK("IP information") },
+  KEYWORDS_END
+};
+KEYWORDS_REG(sta)
+
+// WiFi AP
+KEYWORDS_DECL(ap) {
+
+  KEYWORDS_BEGIN
+
+  { "up", cmd_wifi_up, MANY_ARGS,
+    HELPK("% \"<b>up [NETWORK_NAME [PASSWORD] [max-sta NUM]</>\"\r\n" 
+          "%\r\n"
+          "% Create an Access Point with NETWORK_NAME using the password PASSWORD,\r\n"
+          "% limiting the maximum number of connections to NUM.\r\n"
+          "%\r\n"
+          "% NOTE: use \"\" as NETWORK_NAME to create a hidden network\r\n"
+          "%\r\n"
+          "%<u>Examples</>:\r\n"
+          "%  up                          - create AP using system/saved WiFi config\r\n"
+          "%  up IoT_Network              - create OPEN network IoT_Network\r\n"
+          "%  up Home jfhod786 max-sta 1  - Network \"Home\", with password, for 1 client\r\n"
+          "%  up Home \"\" max-sta 1      - Network \"Home\", no password, for 1 client\r\n"
+          "%  up \"\" jfhod786            - Hidden network, with password"
+          ),
+    HELPK("Initialize and start WiFi interface") },
+
+  { "down", cmd_wifi_down, NO_ARGS,
+    HELPK("% \"<b>down</>\"\r\n" 
+          "%\r\n"
+          "% Stop & shutdown WiFi Access Point"),
+    HELPK("Shutdown WiFi interface") },
+
+  { "scan", cmd_wifi_scan, MANY_ARGS, //TODO: get rid of bssid keyword
+    HELPK("% \"<b>scan</> [active|passive|bssid <o>AABB:CCDD:EEFF</>]*\"\r\n" 
+          "%\r\n"
+          "% Scan and display available networks.\r\n"
+          "% Performs a passive or active scan (the default is \"active\") and displays\r\n"
+          "% the networks found or, if \"bssid\" is set, displays detailed information on\r\n"
+          "% a specific Access Point\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%\r\n"
+          "% <i>scan</>                          : Active scan (AP probe)\r\n"
+          "% <i>scan passive</>                  : Passive scan (AP sniff)\r\n"
+          "% <i>scan bssid 0001:2233:4455</>     : Active scan of specific AP\r\n"
+          "% <i>scan b 0001:2233:4455 passive</> : Passive scan of specific AP"),
+    HELPK("WiFi scan") },
+
+  { "mac", cmd_wifi_mac, 1,
+    HELPK("% \"<b>mac</> <i>MAC-ADDRESS</>|default\"\r\n" 
+          "%\r\n"
+          "% Set interface MAC address:\r\n"
+          "% NOTE: bit 0 of the first octet of the address must be set to zero\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   mac 0101123456af       - invalid address (bit 0 is set)\r\n"
+          "%   mac 0001123456af       - valid address\r\n"
+          "%   mac 00:01:12:34:56:af  - Microsoft style\r\n"
+          "%   mac 0001:1234:56af     - Cisco style"),
+    HELPK("MAC settings (Access Point)") },
+
+  { "hostname", cmd_wifi_hostname, 1,
+    HELPK("% \"<b>hostname</> [<i>TEXT</>]\r\n" 
+          "%\r\n"
+          "% Set/display hostname (per-interface)\r\n"
+          "% No arguments : displays current hostname for the interface\r\n"
+          "% TEXT         : set hostname for the interface\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>hostname</>            : Display hostname\r\n"
+          "%   <i>hostname mars.local</> : Set hostname \"mars.local\"\r\n"
+          "%   <i>hostname Moon2</>      : Set hostname \"Moon2\"\r\n"\
+          "%"),
+    HELPK("Host name (per interface)") },
+  { "hostname", cmd_wifi_hostname, NO_ARGS, HIDDEN_KEYWORD},
+  
+  { "dhcp", cmd_wifi_dhcp, 3,
+    HELPK("% \"<b>dhcp A.B.C.D [<o>NUM</>] [<o>LEASE</>]\r\n" 
+          "% \"<b>dhcp enable|disable\r\n" 
+          "%\r\n"
+          "% Set the IP address range for DHCP and start/stop the server\r\n"
+          "% The DHCP server IP pool must reside within the interface's subnet\r\n"
+          "% <i>NOTE1: When changing the DHCP address pool range</> make sure that\r\n"
+          "% <i> the interface address is on the same subnet</> as the new DHCP IP range!\r\n"
+          "%\r\n"
+          "%<u>Examples (AP address is 192.168.4.1)</>:\r\n"
+          "%   <i>dhcp 192.168.4.8</>        : Lease addresses starting from 192.168.4.6\r\n"
+          "%   <i>dhcp 192.168.4.2 2 3600</> : Only 2 IP addresses available, 1 hour lease\r\n"
+          "%   <i>dhcp enable</>             : Enable DHCP server on the AP interface\r\n"
+          "%"),
+    HELPK("DHCP server settings") },
+  { "dhcp", cmd_wifi_dhcp, 2, HIDDEN_KEYWORD },
+  { "dhcp", cmd_wifi_dhcp, 1, HIDDEN_KEYWORD },
+
+  { "ip", cmd_wifi_ip_address, MANY_ARGS,
+    HELPK("% \"<b>ip address</> A.B.C.D/PREFIX [dns <o>A.B.C.D</> [<o>A.B.C.D</>]]\"\r\n" 
+          "%\r\n"
+          "% Set interface IP address to use\r\n"
+          "% <i>A.B.C.D/PREFIX</>        : IP address and the prefix length\r\n"
+          "% <i>dns A.B.C.D [A.B.C.D]</> : Override DNS (default: use STA's DNS)\r\n"
+          "%\r\n"
+          "%<u>Examples</>:\r\n"
+          "%   <i>ip address 192.168.0.2/24</>         : Static IP with 255.255.255.0 mask\r\n"
+          "%   <i>ip ad 192.168.0.2/24 dns 8.8.8.8</>  : Static IP and static DNS\r\n"
+          "%   <i>ip ad dhcp dns 8.8.8.8 dns 4.4.4.4</>: Dynamic IP and 2 static DNS\r\n"
+          "%"),
+    HELPK("IP information") },
+  
+
+  { "natp", cmd_wifi_natp, MANY_ARGS,
+    HELPK("% \"<b>natp</> enable|disable\"\r\n" 
+          "% \"<b>natp</> add|delete tcp|udp EXT_PORT A.B.C.D LOCAL_PORT\"\r\n" 
+          "%\r\n"
+          "% <i>A.B.C.D</> : Local host (on AP's subnet)\r\n"
+          "% <i>LOCAL_PORT</> : Local port (\"inside\", AP side)\r\n"
+          "% <i>EXT_PORT</>   : External port (\"outide\", STA side)\r\n"
+          "%\r\n"
+          "% 1. Enable or disable NAT/P for WiFi clients\r\n"
+          "% 2. Create/delete static portmaps: map client_IP:PORT to the \"external\"\r\n"
+          "%    port e.g. make client's web/ftp server be accessible from the outside\r\n"
+          "%    Thus AP is the LAN interface, while STA is the WAN interface\r\n"
+          "%\r\n"
+          "%<u>Examples</>:\r\n"
+          "% <i>natp enable</>                 : Enable NAT/P\r\n"
+          "% <i>natp disable</>                : Disable NAT/P (default)\r\n"
+          "% <i>natp add 80 192.168.4.5 8080</>: Map 192.168.4.5:8080 <-> STA:80\r\n"
+          "% <i>natp del 80</>                 : Remove mapping\r\n"
+          "%"),
+    HELPK("NAT/P settings") },
+
+    { "natp", cmd_wifi_natp, 3, HIDDEN_KEYWORD },
+    { "natp", cmd_wifi_natp, 2, HIDDEN_KEYWORD },
+    { "natp", cmd_wifi_natp, 1, HIDDEN_KEYWORD },
+
+
+  { "kick", cmd_wifi_kick, 1,
+    HELPK("% \"<b>kick all</>\r\n" 
+          "% \"<b>kick AID</>>\r\n" 
+          "%\r\n"
+          "% Deauthenticate a connected station by its AID. AID-MAC client mapping\r\n"
+          "% can be seen in \"show wifi clients\" output (see \"AID\" column)\r\n"
+          "%\r\n"
+          "%<u>Examples</>:\r\n"
+          "%   <i>kick all</>  : Kick (deauth) all clients\r\n"
+          "%   <i>kick 1</>    : Kick (deauth) a client with AID#1\r\n"
+          "%"),
+    HELPK("Deauthenticate clients") },
+
+
+  KEYWORDS_END
+};
+KEYWORDS_REG(ap)
+#endif //WITH_WIFI
+
+// esp32-alias>
+//
+#if WITH_ALIAS
+KEYWORDS_DECL(alias) {
+
+  KEYWORDS_BEGIN
+    
+  { "delete", cmd_alias_delete, 1,
+    HELPK("% \"<b>delete</> [all | LINE]\"\r\n" 
+          "%\r\n"
+          "% Delete lines from the alias:\r\n"
+          "% 1. No arguments: means \"delete the last line\"\r\n"
+          "% 2. One argument, the keyword \"all\": deletes all lines\r\n"
+          "% 3. LINE is a line number (use \"list\" to see line numbers)\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>delete</>     - removes the last entered command from the alias\r\n"
+          "%   <i>delete all</> - removes everything\r\n"
+          "%   <i>delete 4</>   - Removes line #4"),
+    HELPK("Delete lines") },
+
+  { "delete", cmd_alias_delete,NO_ARGS, HIDDEN_KEYWORD },
+
+  { "list", cmd_alias_list, NO_ARGS,
+    HELPK("% \"<b>list</>\"\r\n" 
+          "%\r\n"
+          "% Display current alias content"),
+    HELPK("Display content") },
+
+  { "quit", cmd_alias_quit, NO_ARGS,
+    HELPK("% \"<b>quit</>\r\n" 
+          "%\r\n"
+          "% Exit from the alias configuration modes.\r\n"),
+    HELPK("Quit alias editor") },
+
+  // Special entry. Matches any command just as MANY_ARGS matches any number of arguments
+  // The first "*" is what actually matches while "TEXT*" is just a hint for the user
+  { "*TEXT*", cmd_alias_asterisk, MANY_ARGS,
+    HELPK("% \"<b>COMMAND ARG1 ARG2 ... ARGn</>\"\r\n" 
+          "%\r\n"
+          "% Any command with any number of arguments"),
+    HELPK("Add any command to the alias") },
+
+  {
+    NULL, NULL, 0, NULL, NULL
+  }
+};
+
+// Register "alias" command directory (global variable keywords_alias)
+KEYWORDS_REG(alias)
+#endif //WITH_ALIAS
+
+
+#if WITH_FS
+// Filesystem commands. this commands subdirectory is enabled
+// with the "files" command /cmd_files_if()/
+//
+KEYWORDS_DECL(files) {
+
+  KEYWORDS_BEGIN
+
+
+  { "mount", cmd_files_mount0, NO_ARGS,
+    HELPK("% \"<b>mount</>\"\r\n"
+          "%\r\n"
+          "% The command \"mount\" <u>without arguments</> displays information about partitions\r\n"
+          "% and mounted file systems (mount point, FS type, total/used counters)\r\n"
+          ),
+    HELPK("Mount partition/Show partition table") },
+
+  { "mount", cmd_files_mount, 2,
+    HELPK("% \"<b>mount</> <i>LABEL</> [<o>/MOUNT_POINT</>]\"\r\n"
+          "%\r\n"
+           "% Mount a filesystem located on the built-in SPI FLASH\r\n"
+          "%\r\n"
+          "% <i>LABEL</>        - SPI FLASH partition label\r\n"
+          "% <o>/MOUNT_POINT</> - Path starting with \"/\" where the filesystem will be mounted\r\n"
+          "% If the mount point is omitted, then \"/\" + LABEL will be used as the mount point\r\n"
+         "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>mount ffat /fs</> - mount partition \"ffat\" at directory \"/fs\"\r\n"
+          "%   <i>mount ffat</>     - mount partition \"ffat\" at directory \"/ffat\""),
+    NULL },
+
+  { "mount", cmd_files_mount, 1, HIDDEN_KEYWORD },
+
+  { "mount", cmd_files_mount_sd, 6,
+    HELPK("% \"<b>mount <i>vspi|hspi|fspi</> <i>MISO MOSI CLK CS</> [<o>FREQ</>] [<o>/MOUNTPOINT</>]\"\r\n"
+          "%\r\n"
+          "% Mount a FAT filesystem located on SD card connected to SPI bus\r\n"
+          "%\r\n"
+          "% <i>vspi, hspi, fspi</>: SPI bus to use (<i>hspi</> is the safest choise)\r\n"
+          "% <i>MISO, MOSI, CLK, CS</>: SPI pins to use (19,23,18 and 5 for example)\r\n"
+          "% <o>FREQ</> : Optional parameter, SPI frequency in kHz (20000 if not set)\r\n"
+          "% <o>/MOUNTPOINT</>: A path, starting with \"/\" where filesystem will be mounted.\r\n"
+          "%\r\n"
+          "% If mount point is omitted then autogenerated name will be used, like \"scard4\"\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>mount hspi 19 23 18 4 1000 /sd</> - 1 MHz SPI2 bus, mount to \"/sd\" directory\r\n"
+          "%   <i>mount hspi 19 23 18 4 400</>      - Same as the above but SPI bus is at 400kHz\r\n"          
+          "%   <i>mount vspi 19 23 18 4 /sdcard</>  - Mount an SD card located on VSPI pins 19,\r\n"
+          "%                                  23, 18 and 4"), NULL},
+
+  { "mount", cmd_files_mount_sd, 7, HIDDEN_KEYWORD },
+  { "mount", cmd_files_mount_sd, 5, HIDDEN_KEYWORD },
+
+  { "unmount", cmd_files_unmount, 1,
+    HELPK("% \"<b>unmount</> [<o>/MOUNT_POINT</>]\"\r\n"
+          "%\r\n"
+          "% Unmount a file system specified by its mount point\r\n"
+          "% If the mount point is omitted, the file system of the\r\n"
+          "% current working directory is unmounted\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>unmount</>         - unmount current filesystem\r\n"
+          "%   <i>unmount /ffat</>   - unmount by mountpoint path\r\n"
+          "%   <i>unmount /ff/dir1</>- mountpoint is derived from the path\r\n"
+          ),
+    HELPK("Unmount partition") },
+
+  { "unmount", cmd_files_unmount, NO_ARGS, HIDDEN_KEYWORD },
+  { "umount", cmd_files_unmount, 1, HIDDEN_KEYWORD },        // for unix folks
+  { "umount", cmd_files_unmount, NO_ARGS, HIDDEN_KEYWORD },  // for unix folks
+
+  { "ls", cmd_files_ls, 1,
+    HELPK("% \"<b>ls</> [<o>PATH</>]\"\r\n"
+          "%\r\n"
+          "% Show directory listing at PATH given\r\n"
+          "% If PATH is omitted then current directory list is shown"
+          "% <u>Examples:</>\r\n"
+          "%   <i>ls</>              - current directory list\r\n"
+          "%   <i>ls ../dir</>       - relative path \r\n"
+          "%   <i>ls /ffat/dir</>    - absolute path \r\n"
+          "%   <i>ls /</>            - list mountpoints\r\n"
+          ),
+    HELPK("List directory") },
+
+  { "ls", cmd_files_ls, 0, HIDDEN_KEYWORD },
+
+  { "cd", cmd_files_cd, MANY_ARGS,
+    HELPK("% \"<b>cd</> [<o>PATH | ..</>]\"\r\n"
+          "%\r\n"
+          "% Change current directory\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>cd</>              - change current directory to filesystem's root\r\n"
+          "%   <i>cd ..</>           - go one directory up\r\n"
+          "%   <i>cd /ffat/test/</>  - change to \"/ffat/test/\"\r\n"
+          "%   <i>cd ../test2/test3/</> - change to \"/ffat/test2/test3\""),
+    HELPK("Change directory") },
+
+  { "rm", cmd_files_rm, MANY_ARGS,
+    HELPK("% \"<b>rm</> <i>PATH1</> [<o>PATH2 PATH3 ... PATHn</>]\"\r\n"
+          "%\r\n"
+          "% Remove files or directories with their contents.\r\n"
+          "% When removing directories: all files and subdirectories are deleted as well\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>rm /ffat/dir1</>  - remove directory and its content\"/ffat/dir1\"\r\n"
+          "%   <i>rm .</>           - remove directory content, keep the directory\r\n"
+          ),
+    HELPK("Delete files/dirs") },
+
+  { "mv", cmd_files_mv, 2,
+    HELPK("% \"<b>mv</> <i>SOURCE DESTINATION</>\r\n"
+          "%\r\n"
+          "% Move or Rename file or directory SOURCE to DESTINATION\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>mv /ffat/dir1 /ffat/dir2</>             - rename directory \"dir1\" to \"dir2\"\r\n"
+          "%   <i>mv /ffat/fileA.txt /ffat/fileB.txt</>   - rename file \"fileA.txt\" to \"fileB.txt\"\r\n"
+          "%   <i>mv /ffat/dir1/file1 /ffat/dir2</>       - move file to directory\r\n"
+          "%   <i>mv . ../dir/</>                         - move directory content to another dir\r\n"
+          "%   <i>mv /ffat/fileA.txt /spiffs/fileB.txt</> - move file between filesystems"),
+    HELPK("Move/rename files and/or directories") },
+
+  { "cp", cmd_files_cp, 2,
+    HELPK("% \"<b>cp</> <i>SOURCE DESTINATION</>\r\n"
+          "%\r\n"
+          "% Copy file SOURCE to file DESTINATION.\r\n"
+          "% Files SOURCE and DESTINATION can be on different filesystems\r\n"
+          "% Directories are autocreated\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>cp /ffat/test.txt test2.txt</>         - copy file to file\r\n"
+          "%   <i>cp test.txt ../dir/</>                 - copy file to directory\r\n"
+          "%   <i>cp /ffat/dir_src /ffat/dir/</>         - copy directory to directory\r\n"
+          "%   <i>cp . ../dir/</>                        - copy directory content\r\n"
+          "%   <i>cp /spiffs/test.txt /ffat/test2.txt</> - copy between filesystems"),
+    HELPK("Copy files/dirs") },
+
+  { "write", cmd_files_write, MANY_ARGS,
+    HELPK("% \"<b>write</> <i>FILENAME</> [<o>TEXT</>]\"\r\n"
+          "%\r\n"
+          "% Write ASCII/hex string(s) to a file\r\n"
+          "% TEXT can include spaces, escape sequences: \\n, \\r, \\\\, \\t, and\r\n"
+          "% hexadecimal bytes \\AB (A and B are hexadecimal digits)\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>write /ffat/test.txt \\n\\rMixed\\20Text and \\20\\21\\ff</>"),
+    HELPK("Write strings/bytes to the file") },
+
+  { "append", cmd_files_write, MANY_ARGS,
+    HELPK("% \"<b>append</> <i>FILENAME</> [<o>TEXT</>]\"\r\n"
+          "%\r\n"
+          "% Append ASCII/hex string(s) to a file\r\n"
+          "% Escape sequences and ASCII codes are accepted just as in the \"write\" command\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>append /ffat/test.txt \\n\\rMixed\\20Text and \\20\\21\\ff</>"),
+    HELPK("Append strings/bytes to the file") },
+
+  { "insert", cmd_files_insdel, MANY_ARGS,
+    HELPK("% \"<b>insert</> <i>FILENAME LINE_NUM</> [<o>TEXT</>]\"\r\n"
+          "%\r\n"
+          "% Insert TEXT into file FILENAME before line LINE_NUM\r\n"
+          "% \"\\n\" is appended to the inserted string, but \"\\r\" is not\r\n"
+          "% Escape sequences and ASCII codes are accepted just as in the \"write\" command\r\n"
+          "% Lines are numbered starting from 1. Use the \"cat\" command to find\r\n"
+          "% the line numbers\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>insert /ffat/test.txt 1 Hello World!</> - insert before line #0"
+          ),
+    HELPK("Insert lines to text file") },
+
+  { "delete", cmd_files_insdel, 3,
+    HELPK("% \"<b>delete</> <i>FILENAME LINE_NUM</> [<o>COUNT</>]\"\r\n"
+          "%\r\n"
+          "% Delete line LINE_NUM from the text file FILENAME\r\n"
+          "% An optional COUNT argument specifies how many lines to remove (default is 1)\r\n"
+          "% Lines are numbered starting from 1. Use the \"cat -n\" command to find\r\n"
+          "% the line numbers\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>delete /ffat/test.txt 10</>   - remove line #10 from \"/ffat/test.txt\"\r\n"
+          "%   <i>delete /ffat/test.txt 10 3</> - remove lines #10,11 and 12"
+          ),
+    HELPK("Delete lines from a text file") },
+
+  { "delete", cmd_files_insdel, 2, HIDDEN_KEYWORD },
+
+  { "mkdir", cmd_files_mkdir, MANY_ARGS,
+    HELPK("% \"<b>mkdir</> <i>PATH1</> [<o>PATH2 PATH3 ... PATHn</>]\"\r\n"
+          "%\r\n"
+          "% Create empty directories PATH1 ... PATHn\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>mkdir ../a/b/c</>    - create ../a/b/c\r\n"
+          "%   <i>mkdir ../a ../b ../c - create ../a, ../b and ..c"
+          ),
+    HELPK("Create directories") },
+
+  { "cat", cmd_files_cat, MANY_ARGS,
+    HELPK("% \"<b>cat</> [<o>-n|-b</>] <i>PATH</> [<o>START</> [<o>COUNT</>]] [<o>uart NUM</>]\"\r\n"
+          "%\r\n"
+          "% Display (or send via UART) a binary or text file at PATH\r\n"
+          "% -n : display line numbers\r\n"
+          "% -b : treat the file as binary (mutually exclusive with the \"-n\" option)\r\n"
+          "% PATH  : path to the file\r\n"
+          "% START : line number for text files (or byte offset for binary files when \"-b\" is used)\r\n"
+          "% COUNT : number of lines to display (or number of bytes for the \"-b\" option)\r\n"
+          "% NUM   : UART interface number to send the file to\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>cat file</>              - display file \"file\"\r\n"
+          "%   <i>cat -n file</>           - display file \"file\" + line numbers\r\n"
+          "%   <i>cat file 34</>           - display text file starting from line 34 \r\n"
+          "%   <i>cat file 900 10</>       - 10 lines, starting from line 900 \r\n"
+          "%   <i>cat -b file</>           - display binary file (formatted output)\r\n"
+          "%   <i>cat -b file 0x1234</>    - display binary file starting at offset 0x1234\r\n"
+          "%   <i>cat -b file 999 0x400</> - 999 bytes starting from offset 1024 of a binary file\r\n"
+          "%   <i>cat file uart 1</>       - transmit a text file over UART1, strip \"\\r\" if any\r\n"
+          "%   <i>cat -b file uart 1</>    - transmit file over UART1 \"as-is\" byte by byte"
+          ),
+    HELPK("Display/transmit text/binary file") },
+
+  { "touch", cmd_files_touch, MANY_ARGS,
+    HELPK("% \"<b>touch</> <i>PATH1</> [<o>PATH2 PATH3 ... PATHn</>]\"\r\n"
+          "%\r\n"
+          "% Ceate new files or \"touch\" existing\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>touch file1.txt ../file2.txt</> - touch/create two files"
+          ),
+    HELPK("Create/touch files") },
+
+  { "format", cmd_files_format, 1,
+    HELPK("% \"<b>format</> [<o>LABEL</>]\"\r\n"
+          "%\r\n"
+          "% Format the partition LABEL. If LABEL is omitted, the current working\r\n"
+          "% directory is used to determine the partition label\r\n"
+          "%\r\n"
+          "% <i>NOTE</>: SD card over SPI is not supported yet\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>format</>           - format current partition\r\n"
+          "%   <i>format ffat</>      - format partition \"ffat\"\r\n"
+          "%   <i>format /abc/dir2</> - format partition where /abc/dir2 is located\r\n"
+          ),
+    HELPK("Erase old & create new filesystem") },
+
+  { "format", cmd_files_format, 0, HIDDEN_KEYWORD },
+ 
+
+  KEYWORDS_END
+};
+KEYWORDS_REG(files)
+#endif  //WITH_FS
+
+#if WITH_NVS
+// NVS editor/viewer commands
+KEYWORDS_DECL(nvs) {
+
+  KEYWORDS_BEGIN
+
+  { "ls", cmd_nvs_ls, MANY_ARGS,
+    HELPK("% \"<b>ls [PATH]</>\r\n"
+          "%\r\n"
+          "% List keys under namespace PATH. If no PATH provided then listing\r\n"
+          "% for the current namespace is displayed.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>ls /</>      - Displays list of a namespaces\r\n"
+          "%   <i>ls phy</>    - Displays entries of the \"phy\" namespace\r\n"
+          "%   <i>ls ../phy</> - Displays entries of the \"phy\" namespace\r\n"
+          "%   <i>ls</>        - Depending on a current namespace either list key/values\r\n"
+          "%                     or displays list of namespaces"),
+    HELPK("Show NVS directory content") },
+
+  { "cd", cmd_nvs_cd, 1,
+    HELPK("% \"<b>cd [<o>PATH</>]/</>\r\n"
+          "%\r\n"
+          "% Change the current namespace. To create a new namespace, simply \"cd\" into it\r\n"
+          "% and it will be created automatically. Note that empty namespaces may be deleted by the system\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>cd /</>    - Go to the root directory\r\n"
+          "%   <i>cd ..</>   - Go to the root directory\r\n"
+          "%   <i>cd phy</>  - Go to the \"phy\" namespace\r\n"
+          "%   <i>cd /phy</> - Go to the \"phy\" namespace"),
+    HELPK("Change namespace directory") },
+
+
+  { "rm", cmd_nvs_rm, 1,
+    HELPK("% \"<b>rm</> <i>* | NAMESPACE | KEY</>\"\r\n"
+          "%\r\n"
+          "% Remove NVS entries: namespaces and/or key/value pairs\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>rm phy</>  Remove a namespace or a key in the current namespace\r\n"
+          "%   <i>rm /phy</> Remove the namespace \"phy\"\r\n"
+          "%   <i>rm *</>    Remove the contents of the current directory\r\n"
+          "%                 Executing this in the root (\"/\") directory wipes the NVS\r\n"
+          "%   <i>rm /</>    Wipe the entire NVS storage\r\n"
+          ),
+    HELPK("Remove entries") },
+
+  { "new", cmd_nvs_new, MANY_ARGS,
+    HELPK("% \"<b>new</> NAME (unsigned | char | short | long )* [<o>VALUE</>]\"\r\n"
+          "%\r\n"
+          "% Create a new KEY and optionally set its VALUE\r\n"
+          "% Two special types are also supported:\r\n"
+          "%   \"char *\"  - creates a string value\r\n"
+          "%   \"char []\" - creates a binary blob\r\n"
+          "%\r\n"
+          "% Unless <o>VALUE</> is specified all newly created keys are initialized to\r\n"
+          "% zero for scalar types, or to an empty buffer for strings and blobs\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>new Version char</>         - Creates an empty key named \"Version\"\r\n"
+          "%   <i>new Z unsigned long long</> - 64-bit unsigned integer key \"Z\"\r\n"
+          "%   <i>new Var2 char * \"Hello World\"</> - Create & set string value\r\n"
+          "%   <i>new Var3 char[]</>          - Create an empty binary blob \r\n"
+          "%   <i>new Var4 char[] \\10\\20\\30</>- Create & set blob value"
+          ),
+    HELPK("Create keys") },
+
+
+  { "set", cmd_nvs_set, MANY_ARGS,          // TEXT can be quoted (1 arg) or as is (many args)
+    HELPK(
+          "% \"<b>set KEY TEXT</>\"\r\n"
+          "%\r\n"
+          "% Set a new value for the KEY. Numerical values are entered as-is.\r\n"
+          "% Strings and blobs accept either ASCII text or special escape sequences \\AB\r\n"
+          "% where AB is a byte with value 0xAB (see examples below).\r\n"
+          "%\r\n"
+          "% Note that you can create new entries with the \"new\" command.\r\n"
+          "% To list existing keys, use the \"ls\" command.\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>set Name 10</>                  - Set an integer value\r\n"
+          "%   <i>set Name -234567810</>          - Set an integer value\r\n"
+          "%   <i>set Str \"Text with  spaces\"</> - Set a string\r\n"
+          "%   <i>set Str Some other text</>      - Set a string\r\n"
+          "%   <i>set Str \"\"</>                  - Set a string to empty value\r\n"
+          "%   <i>set Blob \\12\\bb\\fd\\55\\44\\55</>  - Set binary data\r\n"
+        ),
+    HELPK("Set new value") },
+
+  { "dump", cmd_nvs_dump, 1,
+    HELPK("% \"<b>dump KEY</>\"\r\n"
+          "%\r\n"
+          "% Display binary blobs and long strings where simple \"ls\" is not enough\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>dump Blob<i>    - Dump key \"Blob\" (a binary blob)\r\n"
+          "%   <i>dump My_Str<i>  - Dump key \"My_Str\" (a null-terminated string)\r\n"
+          ),
+    HELPK("Display binary blobs") },
+
+#if WITH_FS
+  { "export", cmd_nvs_export, 2,
+    HELPK("% \"<b>export [NVS_PATH] FILE_PATH</>\"\r\n"
+          "%\r\n"
+          "% Export the entire NVS partition or individual namespaces as a text file\r\n"
+          "% The filesystem must be mounted to save files; files are appended, not overwritten!\r\n"
+          "% NVS_PATH and FILE_PATH can be relative or absolute (starting with \"/\")\r\n"
+          "% Use \"*\" or \".\" to specify current namespace\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>export / /ffat/nvs.txt</>        - Export all NVS entries to a text file\r\n"
+          "%   <i>export phy /ffat/nvs_phy.txt</>  - Export NVS entries from the \"phy\" namespace\r\n"
+          "%   <i>export nvs_phy.txt</>            - Export current NVS namespace to nvs_phy.csv\r\n"
+          "%   <i>export . test.txt</>             - As the above\r\n"
+          "%   <i>export * ../test.txt</>          - As the above, but file path is relative"
+          ),
+    HELPK("Export NVS") },
+
+  { "export", cmd_nvs_export, 1, HIDDEN_KEYWORD },
+
+  { "import", cmd_exec, 1,
+    HELPK("% \"<b>import FILE_PATH</>\"\r\n"
+          "%\r\n"
+          "% Import NVS records from a text file (created with \"export\")\r\n"
+          "% Filesystem must be mounted in order to read files\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>import /ffat/nvs.txt<i> - Import from /ffat/nvs.txt\r\n"
+          "%   <i>import nvs.txt<i>       - Import from $CWD/nvs.txt\r\n"
+          ),
+    HELPK("Import NVS") },
+#endif //WITH_FS
+  KEYWORDS_END
+};
+KEYWORDS_REG(nvs);
+#endif //WITH_NVS
+
+// root directory commands
+// These commands are available immediately after espshell startup, they are also available inside of
+// of any other subderictory
+//
+KEYWORDS_DECL(main) {  
+
+  KEYWORDS_BEGIN
+#if WITH_TIME  
+  { "time", cmd_time, MANY_ARGS,
+    HELPK(
+          "% \"<b>time</>\" <i>set</> (<i>YEAR</>|<i>MONTH</>|<i>DAY</>|<i>TIME</>|<b>am|pm</>)*\r\n"
+          "%\r\n"
+          "% Set or adjust the system time.\r\n"
+          "% The order of the arguments does not matter; omitted values remain unchanged.\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>time set 2025 april</>     : change the year and month\r\n"
+          "%   <i>time set 20 sep 11:20</>   : set the day, month, and time\r\n"
+          "%   <i>time set 1:2:23 am 2025</> : set the time and year (12-hour format)\r\n"
+          "%   <i>time set 1</>              : set the day of the month\r\n"
+          "%   <i>time set 2025</>           : set the year\r\n"
+        ),
+    HELPK("Set system time") },
+
+  { "time", HELP_ONLY,
+    HELPK(
+          "% \"<b>time</>\" <i>zone TIMESPEC</>|none\r\n"
+          "%\r\n"
+          "% Set the time zone (time offset) or reset it to the default value.\r\n"
+          "% TIMESPEC consists of numbers and time specifiers:\r\n"
+          "% e.g.: \"+7 hours 5 minutes\" or \"-45 minutes 5\"\r\n"
+          "% Add a minus sign to any component to make the entire offset negative.\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>time zone 1</>             : time zone is +0100 UTC\r\n"
+          "%   <i>time zone -1 hour 45 min</>: time zone is -0145 UTC\r\n"
+          "%   <i>time zone none</>          : No time offset"
+    ), NULL },
+
+#endif //WITH_TIME
+  { "uptime", cmd_uptime, NO_ARGS,
+    HELPK("% \"<b>uptime</>\"\r\n"
+          "%\r\n"
+          "% Shows the time elapsed since the last boot, the restart cause,\r\n"
+          "% the firmware boot count, sleep count, and so on\r\n"
+          ), 
+    HELPK("System uptime") },
+
+  // cpu FREQ
+  { "cpu", cmd_cpu, 1,
+    HELPK("% \"<b>cpu</> <i>NUMBER</>\"\r\n"
+          "%\r\n"
+          "% Set CPU frequency to NUMBER Mhz\r\n"
+          "%\r\n"
+          "%<u>Examples:</>\r\n"
+          "%   <i>cpu 160</> - set CPU frequency to 160 MHz"
+          ),
+    HELPK("Set/show CPU frequency") },
+
+  // cpu
+  { "cpu", cmd_cpu, NO_ARGS,
+    HELPK("% \"<b>cpu</>\"\r\n"
+          "%\r\n"
+          "% Show supported CPU frequencies"), NULL },
+
+  { "suspend", cmd_suspend, NO_ARGS,
+    HELPK("% \"<b>suspend</>\"\r\n"
+          "%\r\n"
+          "% Suspend sketch execution (Hotkey: Ctrl+C). Resume with \"resume\""),
+    HELPK("Suspend sketch/task execution") },
+
+  { "suspend", cmd_suspend, 1,
+    HELPK("% \"<b>suspend <i>TASK_ID|TASK_NAME</>\"\r\n"
+          "%\r\n"
+          "% Suspend execution of an arbitrary FreeRTOS task\r\n"
+          "% Specify the task by its name or ID (the ID can be obtained with the \"show tasks\" command)."),
+    NULL },
+
+  { "priority", cmd_priority, 1,
+    HELPK("% \"<b>priority <i>NUM <o>[TASK_ID | TASK_NAME]</>\"\r\n"
+          "%\r\n"
+          "% Adjust the priority of an arbitrary FreeRTOS task\r\n"
+          "% Specify the task by its name or ID (the ID can be obtained with the \"show tasks\" command).\r\n"
+          "% If TASK_ID/TASK_NAME is omitted, the priority of the <u>current task</> is adjusted.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>priority 10</>           - sets the caller's priority to 10\r\n"
+          "%   <i>priority 10 esp_timer</> - sets the priority of the esp_timer system task\r\n"
+          "%   <i>priority 10 \"Tmr Svc\"</> - task with a space in its name\r\n"
+          "%   <i>priority 10 0x45652431</> - sets the priority of the task with ID 0x45652431\r\n"
+         ),
+    HELPK("Adjust task priority") },
+
+  { "priority", cmd_priority, 2, HIDDEN_KEYWORD },
+
+  { "resume", cmd_resume, NO_ARGS,
+    HELPK("% \"<b>resume</>\"\r\n"
+          "%\r\n"
+          "% Resume sketch execution"), "Resume sketch/task execution" },
+
+  { "resume", cmd_resume, 1,
+    HELPK("% \"<b>resume <i>TASK_ID | TASK_NAME</>\"\r\n"
+          "%\r\n"
+          "% Resume execution of an arbitrary FreeRTOS task\r\n"
+          "% Specify the task by its name or ID (the ID can be obtained with the \"show tasks\" command)."
+          ), NULL },
+
+  { "kill", cmd_kill, 2,
+    HELPK("% \"<b>kill <o>[-term|-kill|-9|-15] <i>TASK_ID | TASK_NAME</>\"\r\n"
+          "%\r\n"
+          "% Send a <i>TERMinate</> signal to a task, or forcibly kill it\r\n"
+          "% If the <i>-9</>, <i>-kill</> or <i>-k</> option is used, the task is deleted (unsafe):\r\n"
+          "% use these options only for tasks that cannot be stopped otherwise (e.g. system\r\n"
+          "% tasks like esp_timer or ipc0).\r\n"
+          "%\r\n"
+          "% With no options, or with <i>-term</>, <i>-t</> or <i>-15</>: request the task to finish (safe):\r\n"
+          "% this is the default and preferred way to stop a task.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>kill 0x3fff0000</>    -Terminates tasks in a safe way (using task notifications)\r\n"
+          "%   <i>kill pin</>           -Safe termination of espshell's background command \"pin\"\r\n"
+          "%   <i>kill -9 loopTask</>   -Forcefull deletion of Arduino's loop() task\r\n"
+          "%   <i>kill -k 0x3fff0000</> -Terminates tasks forcefully (task deletion)"),
+    HELPK("Kill tasks") },
+
+  { "kill", cmd_kill, 1, HIDDEN_KEYWORD },
+
+  { "reload", cmd_reload, NO_ARGS,
+    HELPK("% \"<b>reload</>\"\r\n"
+          "%\r\n"
+          "% Restarts CPU, performs a software reboot"), 
+    HELPK("Restarts CPU") },
+
+  { "nap", cmd_nap, NO_ARGS,
+    HELPK("% \"<b>nap</> [<o>deep</>]\"\r\n"
+          "%\r\n"
+          "% Put the CPU into light or deep sleep mode\r\n"
+          "% The CPU resumes after the specified alarm (see <i>\"nap alarm\"</>)."
+          ), "CPU sleep and alarms" },
+
+  { "nap", cmd_nap, 1, HIDDEN_KEYWORD },
+
+  { "nap", cmd_nap_alarm, MANY_ARGS,
+    HELPK("% \"<b>nap alarm</> <i>uart</> NUM [<o>THRESHOLD</>]\"\r\n"
+          "% \"<b>nap alarm</> TIMESPEC\"\r\n"
+          "% \"<b>nap alarm</> <i>low</>|<i>high</> NUM1 [ NUM2 NUM3 .. NUMn]\"\r\n"
+          "% \"<b>nap alarm</> <i>disable-all</>\"\r\n"
+          "%\r\n"
+          "% Set or reset the CPU sleep wakeup source and/or sleep duration\r\n"
+          "% Note that multiple wakeup sources can be configured by running this command\r\n"
+          "% multiple times: for example, UART + TIMER wakeup is allowed.\r\n"
+          "% To disable all wakeup sources, use \"disable-all\".\r\n"
+          "%\r\n"
+          "% TIMESPEC is a string that defines a time interval consisting of days,\r\n"
+          "% hours, minutes, seconds, and milliseconds:\r\n"
+          "%   <i>4 days 1 hour 666 minutes ...</>\r\n"
+          "\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>nap alarm dis</>       : Disable all alarms\r\n"
+          "%   <i>nap alarm uart 1</>    : Wakeup by UART, 3 pos edges on RX line\r\n"
+          "%   <i>nap alarm uart 1 10</> : Wakeup by UART, set RX threshold to 10 pos edges\r\n"
+          "%   <i>nap alarm 1 day 1 hour 6 sec</> : wakeup after 25 hours and 6 seconds\r\n"
+          "%   <i>nap alarm low 1</>     : Wakeup if GPIO#1 is LOW (level)\r\n"
+          "%   <i>nap alarm high 2</>    : Wakeup if GPIO#2 is HIGH (level)\r\n"
+#if CONFIG_IDF_TARGET_ESP32
+          "%   <i>nap alarm low 1 2 3</> : Wakeup when ALL of GPIOs 1, 2 and 3 are LOW\r\n"
+#else          
+          "%   <i>nap alarm low 1 2 3</> : Wakeup when any of GPIOs 1, 2 or 3 are LOW\r\n"
+#endif
+          "%  <i>nap alarm high 1 2 3</> : Wakeup when any of GPIOs 1, 2 or 3 are HIGH\r\n"
+          ), NULL },
+
+  // Interfaces (UART,I2C, RMT, FileSystem..)
+  { "iic", cmd_i2c_if, 1,
+    HELPK("% \"<b>iic</> <i>I2C_NUM</>\"\r\n"
+          "%\r\n"
+          "% Enter I2C interface configuration mode (i2c0, i2c1, ...)\r\n"
+          "% I2C_NUM is the bus number [0..1] to configure.\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>iic 0</>     - Enter I2C mode, use I2C bus#0"), "I2C commands" },
+  // alias for iic. we need it for is_subdirectory()
+  { "i2c", cmd_i2c_if, 1, HIDDEN_KEYWORD },
+   
+
+#if WITH_ALIAS
+  { "alias", cmd_alias_if, 1,
+    HELPK("% \"<b>alias</> <i>NAME</>\"\r\n"
+          "%\r\n"
+          "% Create a named command alias and enter alias configuration mode\r\n"
+          "% Every command you type in alias editing mode is simply recorded to that alias.\r\n"
+          "% To exit alias editing mode use command \"quit\"\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>alias Motor_On</> - Create alias \"Motor_On\""), 
+    HELPK("Command aliases") 
+  },
+#endif
+
+
+#if WITH_SPI
+#  warning "SPI submodule is barely functional and is under development now"
+  { "spi", cmd_spi_if,1,
+    HELPK("% \"<b>spi</> [<o>fspi|hspi|vspi</>]\" \r\n"
+          "%\r\n"
+          "% Enter SPI interface configuration mode \r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>spi vspi</> - configure/use interface SPI3 (VSPI)"),
+    HELPK("SPI commands") },
+#endif
+
+  { "uart", cmd_uart_if, 1,
+    HELPK("% \"<b>uart</> <i>UART_NUM</>\"\r\n"
+          "%\r\n"
+          "% Enter UART interface configuration mode (uart0, uart1 and uart2)\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>uart 0</>     - Enter UART mode, use uart0"
+        ), 
+    HELPK("UART commands") },
+    
+
+  { "sequence", cmd_seq_if, 1,
+    HELPK("% \"<b>sequence</> <i>NUM</>\"\r\n"
+          "%\r\n"
+          "% Create or configure a pulse sequence that can later be replayed on any GPIO.\r\n"
+          "% NUM is the sequence number, in the range [0.." xstr(SEQUENCES_NUM) "].\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>sequence 5</>     - Enter sequence editing mode (Seq#5)"
+          ),
+    HELPK("Pulse sequence configuration") },
+    
+
+#if WITH_FS
+  { "files", cmd_files_if, NO_ARGS,
+    HELPK("% \"<b>files</>\"\r\n"
+          "%\r\n"
+          "% Enter files & file system operations mode"
+          ),
+    HELPK("File system access") },
+#endif
+#if WITH_NVS
+  { "nvs", cmd_nvs_if, MANY_ARGS,
+    HELPK("% \"<b>nvs [PARTITION_NAME]</>\"\r\n"
+          "%\r\n"
+          "% Enter the NVS (Non-Volatile Storage) editor/viewer. If PARTITION_NAME is omitted,\r\n"
+          "% the system’s default partition is used.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>nvs</>           - edit/view the default NVS\r\n"
+          "%   <i>nvs CustomNVS</> - edit/view the NVS located on the CustomNVS partition\r\n"
+          ),
+    HELPK("Non-Volatile Storage access") },
+#endif
+
+  // Actual "show" command help & variats are under "show" subdir, which is
+  // otherwise unused hidden directory. It is declared at the very end of all keywords arrays
+  // This is a workaround for the shell limitations.
+  //
+  // "? show"         displays this help below
+  // "show ?"         same as above
+  // "? show KEYWORD" same as above
+  // "show KEYWORD ?" displays help on "show KEYWORD"
+
+  //
+  { "show", cmd_show, MANY_ARGS,              // <---  this handler catches all "show" command variants
+    HELPK("% Special command \"show\" - display system information:\r\n"
+          "% \r\n"
+          "% <i>show KEYWORD1 KEYWORD2 ... KEYWORDn</>\r\n"
+          "% \r\n"
+          "% The <i>1) full list</> of available keywords can be obtaining by typing \"show ?\"\r\n"
+          "% (i.e. use context help by pressing \"?\" after \"show\" is typed)\r\n"
+          "\r\n"
+          "To display <i>2) additional help</> on each keyword type \"show KEYWORD ?\"\r\n"
+          "For example, to get help on \"show memory\" type \"show memory\" and press \"?\"\r\n"
+          "\r\n"
+          "Brief list of keywords (use \"<b>show ?</>\" for full list):\r\n"
+           "   <i>show wifi [<o>ap | sta | clients</>]\r\n"
+           "   <i>show time</>\r\n"
+           "   <i>show iomux [ <o>FIRST_GPIO</> [ <o>LAST_GPIO</> ]]</>\r\n"
+           "   <i>show uart</> NUM\r\n"
+           "   <i>show tasks</>\r\n"
+           "   <i>show cpuid</>\r\n"
+           "   <i>show pwm</>\r\n"
+           "   <i>show pin</> NUM1 NUM2 ... NUMn\r\n"
+           "   <i>...</>\r\n"
+           "<u>Examples</>:\r\n"
+           "  <i>show iomux</>    : display IO_MUX configuration\r\n"
+           "  <i>show wifi sta</> : display WiFi station information\r\n"
+           "  <i>show pin 1</>    : display GPIO#1 information\r\n"
+           "  <i>show wifi ?</>   : Context help: \"show wifi\" syntax and examples\r\n"),
+
+    "Display system information"},
+
+  { "hostid", cmd_hostid, MANY_ARGS, HIDDEN_KEYWORD },
+
+  // Switch espshell's input to another UART
+  { "tty", cmd_tty, MANY_ARGS, HIDDEN_KEYWORD },
+
+  { "echo", cmd_echo, NO_ARGS, HIDDEN_KEYWORD },  //hidden command, displays echo status
+
+  { "echo", cmd_echo, MANY_ARGS,
+    HELPK("% \"<b>echo</> <i>on | off | silent</>\"\r\n"
+          "% \"<b>echo</> [<o>-n</>] TEXT\"\r\n"
+          "% \"<b>echo</>\"\r\n"
+          "%\r\n"
+          "% Control user input echo / output (default: on)\r\n"
+          "% Executed without arguments, it displays the current echo state.\r\n"
+          "% Can also be used to display TEXT.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%  <i>echo on</>               : enable user input echo\r\n"
+          "%  <i>echo off</>              : disable user input echo\r\n"
+          "%  <i>echo silent</>           : disable all espshell output\r\n"
+          "%  <i>echo Hello, World!</>    : display \"Hello, World!\\r\\n\"\r\n"
+          "%  <i>echo -n Hello, World!</> : display \"Hello, World!\""), 
+    HELPK("Enable/Disable user input echo") },
+
+  
+
+  // 0 and 1 arg "pin" commands are declared first, because cmd_pin() has MANY_ARGS and will match any pin command otherwhise
+  { "pin", cmd_pin, NO_ARGS,
+    HELPK("% \"<b>pin</>\"\r\n"
+          "%\r\n"
+          "% Display available/reserved pins and general GPIO information\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>pin</> - show GPIO availability"), 
+    HELPK("GPIO commands") },
+
+  { "pin", cmd_show_pin, 1,
+    HELPK("% \"<b>pin</> <i>PIN_NUM</>\"\r\n"
+          "%\r\n"
+          "% Show GPIO configuration and digital value of PIN_NUM\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>pin 2</> - show GPIO2 information"), 
+    NULL },
+
+  // TODO: refactor as new "show": create a hidden "pin" group with all keywords explained.
+  
+  { "pin", cmd_pin, MANY_ARGS,
+    HELPK("% \"<b>pin</> <i>PIN_NUM</> [<o>ARG1 | ARG2 | ... | ARGn]*</>\"\r\n"
+          "%\r\n"
+          "% Manipulate pin (GPIO) state, configuration, level, signal routing, etc.\r\n"
+          "% Accepts a list of keywords (or a single keyword):\r\n"
+          "%\r\n"
+          "% \"<i>high</>\" & \"<i>low</>\"       - set pin level to 1 or 0\r\n"
+          "% \"<i>up</>\" & \"<i>down</>\"        - enable PULL_UP or PULL_DOWN\r\n"
+          "% \"<i>out</>\", \"<i>in</>\", \"<i>open</>\"  - set OUTPUT, INPUT, or OPEN_DRAIN mode\r\n"
+          "% \"<i>save</>\" & \"<i>load</>\"      - save/restore pin configuration\r\n"
+          "% \"<i>read</>\" & \"<i>aread</>\"     - perform digital or analog read\r\n"
+          "% \"<i>pwm</>\"                - enable PWM signal on the pin\r\n"
+          "% \"<i>sequence</>\"           - send an RMT (IR remote) sequence\r\n"
+          "% \"<i>matrix</>\" & \"<i>iomux</>\"   - GPIO Matrix and IO_MUX functions\r\n"
+          "% \"<i>hold</>\" & \"<i>release</>\"   - freeze/unfreeze pin state and level\r\n"
+          "% \"<i>delay</>\"              - delay the next keyword\r\n"
+          "% \"<i>NUMBER</>\"             - switch to a new pin; subsequent keywords apply to it\r\n"
+          "% \"<i>loop</>\"               - execute the entire \"pin\" command multiple times\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%\r\n"
+          "%  <i>pin 1 read</>               - GPIO1: read digital value\r\n"
+          "%  <i>pin 1 read 2 read</>        - GPIO1 and GPIO2: read digital values\r\n"
+          "%  <i>pin 1 read aread</>         - GPIO1: digital read followed by an analog read\r\n"
+          "%  <i>pin 1 in out up</>          - GPIO1 is INPUT and OUTPUT with PULLUP\r\n"
+          "%  <i>pin 1 save high load</>     - Save pin state, set HIGH(1), restore pin state\r\n"
+          "%  <i>pin 1 high</>               - GPIO1 set to logic \"1\"\r\n"
+          "%  <i>pin 1 high delay 100 low</> - Set pin1 to logic \"1\", after 100ms to \"0\"\r\n"
+          "%  <i>pin 1 pwm 5000 0.3</>       - Set 5kHz, 30% duty square wave output\r\n"
+          "%  <i>pin 1 pwm 0 0</>            - Disable PWN on GPIO1\r\n"
+          "%  <i>pin 1 low high loop inf</>  - Generate squarewave at max speed\r\n"
+          "%  <i>pin 1 hi del 500 lo del</> 500 loop 10 - Blink a led 10 times\r\n"
+          "%  <i>pin 1 matrix in 33</>       - GPIO1 is the source for peri signal#33\r\n"
+          "%  <i>pin 1 matrix</>             - Reset pin's GPIO Matrix connections"
+          ),  NULL },
+
+  // PWM generation
+  { "pwm", cmd_pwm, 4,
+    HELPK("% \"<b>pwm <i>PIN</> [<o>FREQ</> [<o>DUTY</> [<o>CHANNEL</>] ] ]\"\r\n"
+          "% \"<b>pwm <i>PIN off</>\"\r\n"
+          "%\r\n"
+          "% Start or stop a PWM generator on PIN using frequency FREQ (Hz) and duty cycle\r\n"
+          "% DUTY. The keywords \"<b>off</>\" or \"0\" stop the PWM output.\r\n"
+          "% FREQ is in the range [0 .. " xstr(PWM_MAX_FREQUENCY) "] Hz.\r\n"
+          "%\r\n"
+          "% DUTY is optional (defaults to 0.5 = 50%); valid range is [0.00 .. 1.00].\r\n"
+          "% Duty resolution is auto-selected but can be overridden with \"var ledc_res BITS\".\r\n"
+          "%\r\n"
+          "% CHANNEL is an optional parameter that selects the PWM channel to use (0..15 on ESP32,\r\n"
+          "% or 0..7 on ESP32-S3).\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>pwm 2 1000</>      - enable PWM of 1kHz, 50% duty cycle on pin 2\r\n"
+          "%   <i>pwm 2 100 0.15</>  - enable PWM of 100 Hz, 15% duty cycle on pin 2\r\n"
+          "%   <i>pwm 2 100 0.15 4</>- 100 Hz, 15% duty ,pin 2, Hardware channel 4\r\n"
+          "%   <i>pwm 2</>           - disable PWM on pin 2\r\n"
+          "%   <i>pwm 2 0</>         - same as above\r\n"
+          "%   <i>pwm 2 off</>       - same as above"),  
+    HELPK("PWM output") },
+
+  { "pwm", cmd_pwm, 3, HIDDEN_KEYWORD }, // pwm PIN FREQ DUTY
+  { "pwm", cmd_pwm, 2, HIDDEN_KEYWORD }, // pwm PIN FREQ, pwm PIN off, pwm PIN 0
+  { "pwm", cmd_pwm, 1, HIDDEN_KEYWORD }, // pwm PIN
+
+  // Pulse counting/frequency meter
+  { "count", cmd_count, MANY_ARGS,
+    HELPK("% \"<b>count <i>PIN</> [<o>NUMBER</>| <o>infinite</> | <o>trigger</> | <o>filter LENGTH</>]*\"\r\n"
+          "%\r\n"
+          "% Count pulses on PIN for NUMBER milliseconds (default is 1 second). Use the\r\n"
+          "% keyword <i>infinite</> to make the measurement time very large.\r\n"
+          "% The optional \"trigger\" keyword suspends counting until the first pulse.\r\n"
+          "% The optional \"filter LEN\" keyword ignores pulses <u>shorter than</> LEN nanoseconds.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>count 4</>             - count pulses & measure frequency on GPIO4 for 1000 ms\r\n"
+          "%   <i>count 4 2000</>        - same as above, but measurement time is 2 seconds\r\n"
+          "%   <i>count 4 filter 100</>  - count pulses, ignoring those <u>shorter than</> 100 ns\r\n"
+          "%   <i>count 4 infinite &</>  - count pulses in the <u>background</> continuously\r\n"
+          "%   <i>count 4 trigger</>     - wait for the first pulse, then start counting\r\n"
+          "%   <i>count 4 trigger 2000 filter 300 &</> - wait for the first pulse, then count\r\n"
+          "%     pulses for 2 seconds in the background, ignoring pulses shorter than 300 ns\r\n"
+          "%   <i>count 4 2000 filter 300 trig &</>"), 
+    HELPK("Pulse counter") },
+
+  { "count", HELP_ONLY,
+    HELPK("% \"<b>count <i>PIN</> <i>clear</>\"\r\n"
+          "%\r\n"
+          "% Clear counters associated with PIN. These may be stopped,\r\n"
+          "% running, or in the \"trigger\" state.\r\n"
+          "% <u>Example:</>\r\n"
+          "%   <i>count 4 clear</> - clear all counters associated with GPIO4\r\n"
+          ),
+    NULL },
+    
+#if WITH_ESPCAM
+  { "camera", cmd_camera_if, MANY_ARGS, 
+    HELPK("% \"<b>camera</>\r\n"
+          "%\r\n"
+          "% Enter camera configuration mode"),
+    HELPK("Camera commands") },
+
+#endif //WITH_ESPCAM
+
+  { "var", cmd_var, MANY_ARGS,
+  HELPK("% \"<b>var ADDRESS NAME C-TYPE</>\"\r\n"
+      "%\r\n"
+      "% Create a new variable. The variable will be associated with the\r\n"
+      "% specified ADDRESS and interpreted as having type CTYPE. This allows\r\n"
+      "% reading and writing arbitrary memory locations.\r\n"
+      "%\r\n"
+      "% <u>Examples:</>\r\n"
+      "%   <i>var 0x3fce4000 g_ic int * []</> - array of pointers named g_ic\r\n"
+      "%   <i>var 0x3fce4000 g_ic int *</>    - pointer to int\r\n"
+      "%   <i>var 0x3fce4000 x int</>         - int at address 0x3fce4000\r\n"
+      "%\r\n"
+      "% <u>Writing to address 0x3fce4000:</>\r\n"
+      "%   <i>var x 10</>                    - store int(10) at 0x3fce4000\r\n"
+      "%   <i>var g_ic[16] 10</>             - store int(10) at 0x3fce4040\r\n"
+      ),
+  HELPK("Sketch variables") },
+  
+  { "var", HELP_ONLY,
+    HELPK("% \"<b>var</> <i>VARIABLE_NAME</> [<o>NEW_VALUE</>]\"\r\n"
+          "%\r\n"
+          "%  a. Display a sketch variable value\r\n"
+          "%  b. Set a sketch variable to a new value\r\n"
+          "% VARIABLE_NAME is the variable name (use \"var\" to list all variables)\r\n"
+          "% NEW_VALUE may be an integer or floating-point value, positive or negative\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>var button1</>     - display the current value of the \"button1\" sketch variable\r\n"
+          "%   <i>var angle -12.3</> - set the sketch variable \"angle\" to -12.3\r\n"
+          "%\r\n"
+          "% Note #1: Partial (shortened) variable names may be used\r\n"
+          "% Note #2: Use the prefixes \"0x\" for hex, \"0\" for octal, and \"0b\" for binary numbers\r\n"
+    ),
+      NULL },
+
+  { "var", HELP_ONLY,
+    HELPK("% \"<b>var</> <i>NUMBER</>\"\r\n"
+          "%\r\n"
+          "% Display a NUMBER in different bases and perform an unsafe C-style\r\n"
+          "% cast of memory contents.\r\n"
+          "% NUMBER can be anything that converts to a numeric value. Use \"0b\", \"0x\" or \"0\"\r\n"
+          "% prefixes to enter binary, hexadecimal, or octal numbers.\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>var -1234</>     - get information on the decimal number -1234\r\n"
+          "%   <i>var 0x1234</>    - ...on a hexadecimal number\r\n"
+          "%   <i>var 01234</>     - ...on an octal number\r\n"
+          "%   <i>var 0b1001110</> - ...and on a binary number\r\n"
+          ),
+    NULL },
+
+
+  { "var", cmd_var_show, NO_ARGS,
+    HELPK("% \"<b>var</>\"\r\n"
+          "%\r\n"
+          "% Display the list of sketch variables accessible from the shell\r\n"
+          "% Variables must be registered with the convar_add() macro\r\n"
+          "%\r\n"
+          "% <u>Example:</>\r\n"
+          "%   <i>var</> - display the list of variables\r\n"
+          ),
+    NULL },
+
+#if WITH_ALIAS
+
+  { "if", cmd_if, MANY_ARGS,
+    HELPK("% \"<b>if <i>rising|falling</> PIN [<o>low|high PIN</>]* [<o>max-exec NUM</>] [<o>rate-limit NUM</>] <i>exec</> ALIAS</>\"\r\n"
+          "%\r\n"
+          "% Catch GPIO rising or falling interrupts and execute scripts\r\n"
+          "% Additional <u>level conditions</> may be provided (see examples)\r\n"
+          "%\r\n"
+          "%   <i>max-exec</> NUM   : execute this condition no more than NUM times\r\n"
+          "%   <i>rate-limit</> NUM : minimum time (ms) between two consecutive executions\r\n"
+          "%   <i>exec</> ALIAS     : alias for \"exec\"\r\n"
+          "%\r\n"
+          "% <u>Examples</>\r\n"
+          "% Execute alias \"Comm\" when GPIO #5 has a falling edge\r\n"
+          "%\r\n"
+          "%   <i>if falling 5 exec Comm</>\r\n"
+          "%\r\n"
+          "% Execute alias \"Comm\" when GPIO #5 has a rising edge, GPIO #6 is low, and\r\n"
+          "% GPIO #10 is high, but no more than once per second and no more than five\r\n"
+          "% times in total:\r\n"
+          "%\r\n"
+          "%   <i>if rising 5 low 6 high 10 max-exec 5 rate-limit 1000 exec Comm</>\r\n"
+          "%\r\n"
+          "% NOTE: If the alias does not exist, it will be created automatically (empty)\r\n"
+          ), 
+    HELPK("Conditional GPIO events") },
+
+  { "if", HELP_ONLY,
+    HELPK("% \"<b>if <i>low|high</> PIN [<o>low|high PIN</>]* [<o>max-exec NUM</>] [<o>poll NUM</>] <i>exec</> ALIAS</>\"\r\n"
+          "%\r\n"
+          "% Create a condition that is checked periodically (polling)\r\n"
+          "% No interrupts involved; the maximum rate is limited by the poll interval\r\n"
+          "%   <i>max-exec</> NUM : execute this condition no more than NUM times\r\n"
+          "%   <i>poll</>     NUM : poll interval in milliseconds (default: 1000 ms)\r\n"
+          "%   <i>exec</>     ALIAS : alias to execute\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>if low 5 poll 10000 exec Comm</> : if GPIO 5 is low (checked every 10 s)\r\n"
+          "%   <i>if low 5 high 10 high 11 exec Comm</> : if GPIO 5 is low and GPIO 10/11 are high\r\n"
+          "%   <i>if low 5 max-exec 5 poll 1 exec Comm</> : … up to five times, polled every 1 ms\r\n"
+          ), 
+    NULL },
+
+  { "if", HELP_ONLY,
+    HELPK("% \"<b>if delete NUM | all | poll | gpio NUM\"\r\n"
+          "% \"<b>every delete NUM | all\"\r\n"
+          "%\r\n"
+          "% Delete an \"if\" or \"every\" condition: by its ID, by GPIO number,\r\n"
+          "% only polled entries or all of them. (NOTE: Use \"show ifs\" to list all\r\n"
+          "% conditions and see their IDs)\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <b>if delete <i>6</></>      : delete condition #6\r\n"
+          "%   <b>if delete <i>all</></>    : delete all conditions (all means ALL)\r\n"
+          "%   <b>if delete <i>gpio 7</></> : delete rising/falling conditions assigned to GPIO 7\r\n"
+          "%   <b>if delete <i>poll</></>   : delete all entries with the \"poll\" keyword\r\n"
+          "%   <b>every delete <i>8</></>   : delete vondition #8\r\n"
+          ), 
+    NULL },
+
+  { "if", HELP_ONLY,
+    HELPK("% \"<b>if clear NUM | all | poll | gpio NUM\"\r\n"
+          "% \"<b>every clear NUM | all\"\r\n"
+          "%\r\n"
+          "% Clear counters (hit count and timestamp) for a given \"if\" or \"every\"\r\n"
+          "% Clear by its ID, by a GPIO number, only polled entries or clear all of them\r\n"
+          "% Main use is to reset conditions that have hit their \"max-exec\" limit\r\n"
+          "%\r\n"
+          "% Use \"<i>show ifs</>\" to list all conditions and see their IDs\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>if clear 6</>       : Clear counters for condition #6\r\n"
+          "%   <i>if clear all</>     : Clear counters for all conditions (all, means ALL)\r\n"
+          "%   <i>if clear gpio 7</>  : Clear counters for rising/falling conditions of GPIO#7"
+          "%   <i>if clear poll</>    : Clear counters for entries with the \"poll\" keyword\r\n"
+          "%   <i>every clear 8</>    : Clear counters for condition #6\r\n"
+          ),
+    NULL },
+
+  { "if", HELP_ONLY,
+    HELPK("% \"<b>if <i>disable</>|<i>enable</> NUM|<i>all</>\"\r\n"
+          "% \"<b>every <i>disable</>|<i>enable</> NUM|<i>all</>\"\r\n"
+          "%\r\n"
+          "% Enable or disable execution of a given \"if\" or \"every\" condition by its ID\r\n"
+          "% (NOTE: Use \"show ifs\" to list all conditions and see their IDs)\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <b>if disable <i>6</>      : disable condition #6\r\n"
+          "%   <b>if disable <i>all</>    : disable all conditions\r\n"
+          "%   <b>if enable <i>all</>     : Enable processing of all \"if\" conditions"
+          "%   <b>every disable <i>8</>   : disable condition #8\r\n"
+          ),
+    NULL },
+
+  { "if", HELP_ONLY,
+    HELPK("% \"<b>if save <i>ID</>|<i>*</> /FILENAME\"\r\n"
+          "% \"<b>every save <i>ID</>|<i>*</> /FILENAME\"\r\n"
+          "%\r\n"
+          "% Save if/every statements to a file\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <b>if save <i>* /ffat/test.txt</> : Save all \"if\" entries\r\n"
+          "%   <b>every save <i>1 /ffat/test2</> : Save \"every\" entry #1"), NULL },
+// TODO: must use read_timespec()
+  { "every", cmd_if, MANY_ARGS,
+    HELPK("% \"<b>every <i>TIME</> [<o>delay MILLIS</>] [<o>max-exec NUM</>] exec <i>ALIAS</>\"\r\n"
+          "%\r\n"
+          "% Periodic events.\r\n"
+          "% TIME is specified as NUMBER followed by \"milliseconds|seconds|minutes|hours|days\"\r\n"
+          "%\r\n"
+          "%   <i>max-exec</> NUM    : execute this condition no more than NUM times\r\n"
+          "%   <i>delay</> MILLIS   : postpone the first execution for the specified amount of time\r\n"
+          "%   <i>exec</> ALIAS     : alias to exec\r\n"
+          "%\r\n"
+          "% <u>Examples</>\r\n"
+          "%   <i>every 1 min 5 sec exec alias my_alias</>\r\n"
+          "%   <i>every 5 sec delay 50000 exec my_alias</>\r\n"
+          "%   <i>every 5 sec delay 50000 max-exec 7 exec my_alias</>"
+          ), "Periodic events" },
+#endif //ALIAS
+#if WITH_ALIAS || WITH_FS
+  { "exec", cmd_exec, MANY_ARGS,
+    HELPK("% \"<b>exec NAME [NAME NAME ... NAME ]</>\"\r\n"
+          "%\r\n"
+          "% a) Execute an alias (or multiple aliases if more than one NAME is provided)\r\n"
+          "%    Aliases are <u>lists of commands</>; use \"alias\" to create or edit them\r\n"
+          "%\r\n"
+          "% b) Execute a shell script from the filesystem, a file named /NAME\r\n"
+          "%    The filesystem must be mounted, and /FILE_NAME must start with \"/\"\r\n"
+          "%    (File path must be absolute hence the \"/\")\r\n"
+          "%\r\n"
+          "% <u>Examples</>>\r\n"
+          "%   <i>exec motor_on</>                              : execute alias \"motor_on\"\r\n"
+          "%   <i>exec \"/ff/Desktop/New Folder/script.cfg\"</> : execute script\r\n"
+          "%   <i>exec /ff/file.txt /ff/file2.txt motor_off</>  : files and aliases\r\n"
+          
+          ),
+    HELPK("Execute scripts/aliases") },
+#endif // WITH_FS || WITH_ALIAS
+
+#if WITH_HISTORY
+  { "history", cmd_history, 1, HIDDEN_KEYWORD },
+  { "history", cmd_history, NO_ARGS, HIDDEN_KEYWORD },
+#endif  
+
+#if WITH_COLOR
+  { "colors", cmd_colors, 1, HIDDEN_KEYWORD },
+  { "colors", cmd_colors, NO_ARGS, HIDDEN_KEYWORD },
+#endif
+#if WITH_WIFI
+  { "wifi", cmd_wifi_if, 1,
+    HELPK("% \"<b>wifi ap|sta</>\"\r\n"
+          "%\r\n"
+          "% Enter WiFi STA or WiFi AP configuration modes:\r\n"
+          "%   \"<i>wifi sta</>\" - Station mode (WiFi client)\r\n"
+          "%   \"<i>wifi ap</>\"  - SoftAP mode (WiFi Access Point)\r\n"
+        ), 
+    HELPK("WiFi interface commands") },
+
+  { "wifi", cmd_wifi_if, 2,
+    HELPK("% \"<b>wifi storage flash|ram</>\"\r\n"
+          "%\r\n"
+          "% Switch between RAM and FLASH for storing WiFi configuration\r\n"
+          "% so that after a reboot the \"up\" command can be used without arguments:\r\n"
+          "% SSID, BSSID, passwords, etc. will be retrieved from FLASH.\r\n"
+          "% The default storage is RAM (all configuration is discarded after reboot).\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>wifi storage flash</> - Enable auto-saving of STA/AP settings\r\n"
+          "%   <i>wifi storage ram</>   - Keep settings in RAM only\r\n"
+        ), 
+    NULL },
+
+  { "wifi", cmd_wifi_if, 2, // "wifi log" is handled by cmd_wifi_if as well
+    HELPK("% \"<b>wifi log [enable|disable]</>\"\r\n"
+          "%\r\n"
+          "% Enable or disable WiFi event display: e.g., connection, disconnection,\r\n"
+          "% IP address obtained, and so on. This can be annoying, so logging is\r\n"
+          "% disabled by default\r\n"
+          "%\r\n"
+          "% <u>Examples</>:\r\n"
+          "% \"<i>wifi log enable</>\" - Enable logging"
+        ),
+    HELPK("WiFi interface commands") },
+#endif
+  // User-specific command.
+  { "misc", cmd_misc, MANY_ARGS, HIDDEN_KEYWORD },
+  KEYWORDS_END
+};
+KEYWORDS_REG(main);
+
+#if WITH_ESPCAM
+// Commands for dealing with video camera (ai-thinker, m5stack, dfrobot etc or custom)
+// Handlers are implemented in espcam.h
+//
+KEYWORDS_DECL(camera) {
+
+  KEYWORDS_BEGIN
+
+  { "up", cmd_camera_up, MANY_ARGS, 
+    HELPK("% \"<b>up</> [<o>MODEL | custom | clock HZ | i2c NUMBER</>]*\r\n"
+          "%\r\n"
+          "% Detect & initialize the camera\n\r"
+          "%\n\r"
+          "% <i>MODEL</>    - The camera model; Supported models list is here: \"show camera models\"\n\r"
+          "%            Use word \"custom\" to specify custom camera model. (see \"pinout\")\r\n"
+          "% <i>clock HZ</> - Set XCLK frequency, Hertz. Default value is 16000000 (16Mhz)\n\r"
+          "% <i>i2c NUM</>  - Use existing i2c interface, ignore SDA & SCL pins\r\n%\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <i>up ai-thinker</> - Initialize Ai-Thinker ESP32Cam\r\n"
+          "%   <i>up</>            - Camera assumed to be initialized by sketch, and used as is\r\n"
+          "%   <i>up custom clock <i>20000000</>  - Initialize custom pinout camera at 20Mhz"
+          ),
+    HELPK("Camera commands")
+  },
+
+  { "mode", cmd_camera_mode, 1,
+    HELPK("% \"<b>mode</> jpeg|grayscale|555|565\"\n\r"
+          "%\n\r"
+          "% Set capture mode. Must be set before camera is \"up\""), "Capture mode" },
+
+  { "down", cmd_camera_down, NO_ARGS,
+    HELPK("% \"<b>down</>\"\n\r"
+          "%\n\r"
+          "% Deinitialize & reset (and/or power-off)"), "Shutdown camera" },
+
+  { "capture", cmd_camera_capture, NO_ARGS,
+    HELPK("% \"<b>capture</>\"\n\r"
+          "%\n\r"
+          "% Capture a frame"), "Capture a frame" },
+
+  { "filesize", cmd_camera_filesize, NO_ARGS,
+    HELPK("% \"<b>filesize</>\"\n\r"
+          "%\n\r"
+          "% Display the size of latest captured frame, in bytes"
+    ), "Frame file size" },
+
+  { "save", cmd_camera_save, 1,
+    HELPK("% \"<b>save</> <i>/FILENAME</> [<o>base64 | ascii-hex</>]\"\n\r"
+          "% \"<b>save</> <i>uart NUM</> [<o>base64 | ascii-hex</>]\"\n\r"
+          "%\n\r"
+          "% Transmit the last captured frame over specified UART or save it to a file\n\r"
+          "% Filesystem must be mounted before attempting to save a file\n\r"
+          "% UART must be initialized before attempting to transmit any data\r\n"
+          "%\n\r"
+          "% Optional flags ascii-hex and base64 are for converting images to the ASCII text\r\n"
+          "%   <o>ascii-hex</> is a stream of hex bytes: \"AB07876A...\"\r\n"
+          "%   <o>base64</> is a base 64 encoding as its name implies\r\n"
+          "%\n\r"
+          "% Dollar sign (\"$\") in filenames gets expanded to a sequental, random number\n\r"
+          "% Its main use is to automate saving of multiple frames\n\r"
+          "% <u>Examples:</>\n\r"
+          "%   <i>transfer</> /ffat/pix/12.jpg      : save to the file\n\r"
+          "%   <i>transfer uart</> 1                : transmit as is over uart1\n\r"
+          "%   <i>transfer</> /ffat/pix/file$.jpg   : save file0, file1, .. etc\n\r"
+          "%   <i>transfer uart</> 1 <o>ascii-hex</>: convert to ascii before transmit\n\r"
+    ), "Save / transfer captured data" },
+
+  { "pinout", cmd_camera_pinout, 16,
+    HELPK("% \"<b>pinout</> <o>PWDN RESET</> XCLK <o>SDA SCL</> <i>D7 D6 D5 D4 D3 D2 D1 D0 VSYNC HREF PCLK</>\r\n"
+          "%\r\n"
+          "% Set custom pinout for the camera model \"<i>custom</>\"\r\n"
+          "% Later it can be used with \"camera up custom\"\n\r"
+          "%\n\r"
+          "% Command requires 16 arguments (GPIO numbers): i2c bus, data pins, etc\r\n"
+          "% If your board don't have / don't use certain pins then use \"-\" (minus sign)\r\n"
+          "% instead of pin number to disable it (or \"-1\" - it also works).\r\n"
+          "%   <i>PWDN</>  - Power down GPIO# (set LOW to power up)\r\n"
+          "%   <i>RESET</> - Camera reset GPIO\r\n"
+          "%   <i>XCLK</>  - High frequency source GPIO, camera clock\r\n"
+          "%   <i>SDA, SCL</> - Pins, where camera's I2C interface is connected\r\n"
+          "%   <i>D7..D0</> (or <i>Y9..Y2</>) - Pins where camera data bus is connected\r\n"
+          "%   <i>VSYNC HREF PCLK</> - GPIOs, where standart CMOS camera signals are connected\t\n"
+          "%\r\n"
+          "% <u>Example:</>\r\n"
+          "%   <b>pinout</> <i>- - 1 2 3 4 5 6 7 8 9 10 11 12 13 14</>\r\n"
+          "%\r\n"
+          "% In example above, pins PWDN & RESET are not used and thus set to \"-\"\r\n"
+          "%\r\n"
+          "% This custom pinout can be activated via <i>camera up custom</>"
+    ), "Set custom camera pinout"},
+
+  { "pinout", HELP_ONLY,
+    HELPK("% \"<b>pinout</> <i>KEYWORD</> <o>VALUE1 VALUE2 ... VALUEn</>\r\n"
+          "%\r\n"
+          "% Set custom pinout for the camera model \"<i>custom</>\"\r\n"
+          "% Same as the command above, but sets individual pins using different KEYWORDs:\n\r"
+          "%\n\r"
+          "%   <i>power PWDN RST</> : Set PWDN and RST pins. Use \"-\" if N/A\r\n"
+          "%   <i>xclk NUM</>       : Set GPIO number where XCLK is connected\r\n"
+          "%   <i>i2c SDA SCL</>    : I2C/SCCB bus pins\r\n"
+          "%   <i>data D7 D6 D5 D4 D3 D2 D1 D0</> (or <i>Y9..Y2</>) : Data bus pins\r\n"
+          "%   <i>vsync NUM</>      : GPIO number where VSYNC is connected\r\n"
+          "%   <i>href NUM</>       : GPIO number where HREF is connected\r\n"
+          "%   <i>pclk NUM</>       : GPIO number where PCLK is connected\r\n"
+          "%\r\n"
+          "% <u>Examples:</>\r\n"
+          "%   <b>pinout</> <i>power 32 -</> : PWDN is GPIO32, RST is not connected\r\n"
+          "%   <b>pinout</> <i>i2c 10 11</>  : SDA=GPIO10, SCL=GPIO11, camera control bus\r\n"
+          "%   <b>pinout</> <i>data 0 1 2 3 4 5 6 7</>  : GPIO0..7 is the data bus\r\n"
+          "% This custom pinout can be activated via <i>camera up custom</>"
+    ), "Set custom camera pinout"},
+
+
+  { "pinout", cmd_camera_pinout, 2, HIDDEN_KEYWORD }, // "pinout KEY VALUE"
+  { "pinout", cmd_camera_pinout, 3, HIDDEN_KEYWORD }, // "pinout KEY VALUE1 VALUE2"
+  { "pinout", cmd_camera_pinout, 9, HIDDEN_KEYWORD }, // "pinout KEY D7 D6 D5 D4 D3 D2 D1 D0"
+
+
+  { "gain", cmd_camera_gain, 1, 
+    HELPK("% \"<b>gain</> <i>auto</>|(0..30)\"\n\r"
+          "%\r\n"
+          "% Set camera sensetivity (auto or 0..30)"), "Gain" },
+
+  { "balance", cmd_camera_balance, 1, 
+    HELPK("% <b>balance</> <i>none</>|<i>auto</>|<i>sunny</>|<i>cloudy</>|<i>office</>|<i>home</>\n\r"
+          "%\r\n"
+          "% Set camera White Balance correction"),  "White balance" },
+
+  { "exposure", cmd_camera_exposure, 2, 
+    HELPK("% <b>exposure</> <i>auto</> [<o>-2..2</>]\n\r"
+          "% \n\r"
+          "% Set camera exposure mode to auto & optional AE shift:\r\n"
+          "% Example:\r\n"
+          "%   exposure auto     - set exposure to auto\r\n"
+          "%   exposure auto -2  - same as above + correction factor of -2"), "Exposure" },
+
+  { "exposure", cmd_camera_exposure, 1, 
+    HELPK("% <b>exposure</> (<i>0..1200</>)\n\r"
+          "%\n\r"
+          "% Set manual camera exposure:\r\n"
+          "% Example:\r\n"
+          "%   exposure 800 - Set exposure parameter to 800"),"Exposure" },
+
+
+  { "brightness", cmd_camera_qbcss, 1,
+      HELPK("% <b>brightness</> (<i>-2..2</>)\n\r"
+          "%\n\r"
+          "% Set brightness correction (gamma):\r\n"
+          "% Example:\r\n"
+          "%   exposure -1 - Make things darker"), "Brightness" },
+
+  { "saturation", cmd_camera_qbcss, 1,
+      HELPK("% <b>saturation</> (<i>-2..2</>)\n\r"
+          "%\n\r"
+          "% Set saturation correction (vivid colors):\r\n"
+          "% Example:\r\n"
+          "%   saturation 2 - Set saturation to its maximum"), "Saturation" },
+
+  { "contrast", cmd_camera_qbcss, 1,
+      HELPK("% <b>contrast</> (<i>-2..2</>)\n\r"
+          "%\n\r"
+          "% Set contrast correction:\r\n"
+          "% Example:\r\n"
+          "%   contrast 2 - Set contrast parameter to its maximum"), "Contrast" },
+
+  { "sharpness", cmd_camera_qbcss, 1,
+      HELPK("% <b>sharpness</> (<i>-2..2</>)\n\r"
+          "%\n\r"
+          "% Set image sharpness correction:\r\n"
+          "% Example:\r\n"
+          "%   sharpness -2 - Decrease sharpness to its minimum"), "Sharpness" },
+
+  { "compress", cmd_camera_qbcss, 1,
+      HELPK("% <b>compression</> (<i>2..63</>)\n\r"
+          "%\n\r"
+          "% Set JPEG compression factor (2 - best quality, 63 - smallest size)\r\n"
+          "% Example:\r\n"
+          "%   compression 4 - Higher picture quality, larger file"), "JPEG compression settings" },
+
+  { "size", cmd_camera_size, 1, 
+    HELPK("% \"size vga|svga|xga|hd|sxga|uxga...\"\n\r"
+          "%\n\r"
+          "% Set picture size:\n\r"
+          "% vga   - 640x480\n\r"
+          "% svga  - 800x600\n\r"
+          "% xga   - 1024x768\n\r"
+          "% hd    - 1280x720\n\r"
+          "% sxga  - 1280x1024\n\r"
+          "% uxga  - 1600x1200\r\n"
+          "% fhd   - 1920x1080\r\n"
+          "% qxga  - 2048x1536\r\n"
+          "% qhd   - 2560x1440\r\n"
+          "% wqxga - 2560x1600\r\n"
+          "% qsxga - 2560x1920\r\n"
+          "% 5mp   - 2592x1944"), "Resolution / Picture size" },
+
+  KEYWORDS_END
+};
+KEYWORDS_REG(camera);
+#endif // WITH_ESPCAM
+
+// Hidden directory just for help pages for the "show" command
+// Handlers of this group expect argv[0] == "show"
+KEYWORDS_DECL(show) {
+
+#if WITH_WIFI
+  { "wifi", cmd_show_wifi, MANY_ARGS,
+    HELPK("% \"<b>show <i>wifi ap | sta | clients</>\"\r\n"
+          "%\r\n"
+          "% Display WiFi interface information (AP or STA mode)\r\n"
+          "%   <i>ap</>      : show Access Point interface information\r\n"
+          "%   <i>sta</>     : show Station interface information\r\n"
+          "%   <i>clients</> : list stations connected to this AP\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <i>show wifi ap</>      : display Access Point information\r\n"
+          "%   <i>show wifi clients</> : list connected stations\r\n"
+          ),"WiFi parameters"},
+#endif
+  { "nap", cmd_show_nap, MANY_ARGS,
+    HELPK("% \"<b>show <i>nap</> NUM\"\r\n"
+          "%\r\n"
+          "% Display CPU sleep parameters"),"Sleep configuration"},
+          
+  { "time", cmd_show_time, MANY_ARGS,
+    HELPK("% \"<b>show <i>time</>\"\r\n"
+          "%\r\n"
+          "% Display current time and time settings"),"Time and date"},
+
+{ "iomux", cmd_show_iomux, MANY_ARGS,
+  HELPK("% \"<b>show <i>iomux</> [START_PIN [END_PIN]]\"\r\n"
+        "%\r\n"
+        "% Display the IO_MUX table and current GPIO mapping\r\n"
+        "% If START_PIN is omitted, the entire table is displayed.\r\n"
+        "% If START_PIN is specified, entries from START_PIN to the end are displayed.\r\n"
+        "% If both START_PIN and END_PIN are specified, only that range of the IO_MUX\r\n"
+        "% table is shown.\r\n"
+        "%\r\n"
+        "% <u>Examples</>:\r\n"
+        "%\r\n"
+        "%   <i>show iomux</>        : display the entire table\r\n"
+        "%   <i>show iomux 10</>     : entries 10..MAX_PIN_NUMBER\r\n"
+        "%   <i>show iomux 10 20</>  : entries corresponding to GPIO10..GPIO20\r\n"
+        ),"IO_MUX configuration"},
+
+  { "version", cmd_show_version, MANY_ARGS,
+    HELPK("% \"<b>show <i>version</> NUM\"\r\n"
+          "%\r\n"
+          "% Display version information"),"Software version"},
+
+  { "uart", cmd_show_uart, MANY_ARGS,
+    HELPK("% \"<b>show <i>uart</> NUM\"\r\n"
+          "%\r\n"
+          "% Display UART settings & parameters"),"UART configuration"},
+
+  { "tasks", cmd_show_tasks, MANY_ARGS,
+    HELPK("% \"<b>show <i>tasks</>\"\r\n"
+          "%\r\n"
+          "% Display Task ID's and other information for FreeRTOS tasks\r\n"
+          "% These IDs can be arguments to \"kill\", \"suspend\" and other commands"), "Show running tasks"},
+
+  { "cpuid", cmd_show_cpuid, MANY_ARGS,
+    HELPK("% \"<b>show <i>cpuid</>\"\r\n"
+          "%\r\n"
+          "% Display CPU ID information, used components versions and uptime\r\n"
+          "% CPU temperature in Celsius is also displayed"),"Show CPU, HW and FW information"},
+
+  { "pwm", cmd_show_pwm, MANY_ARGS,
+    HELPK("% \"<b>show <i>pwm</>\"\r\n"
+          "%\r\n"
+          "% Display currently active PWM generators:\r\n"
+          "% GPIO number, frequency and duty cycle"),"Show active PWM"},
+
+  { "pin", cmd_show_pin, MANY_ARGS,
+    HELPK("% \"<b>show <i>pin</> ARG1 ARG2 .. ARGn\"\r\n"
+          "%\r\n"
+          "% Display information on pins ARG1, ARG2, ..., ARGn\r\n"
+          "% at once"),"Show GPIO"},
+
+  { "counters",  cmd_show_counters, MANY_ARGS,
+    HELPK("% \"<b>show <i>counters</>\"\r\n"
+          "%\r\n"
+          "% Pulse counters / frequency meters states and values\r\n"
+          "% Depending on a SoC used it may be up to 8 hardware counters"),"Show pulse counters/frequency meters"},
+
+  { "sequence", cmd_show_sequence, MANY_ARGS,
+    HELPK("% \"<b>show <i>sequence</> NUMBER\"\r\n"
+          "%\r\n"
+          "% Display sequence configuration for given index:\r\n"
+          "% \"show sequence 6\"  - display Sequence #6 configuration"),"Display pulse sequence"},
+#if WITH_FS
+  { "mount", cmd_show_mount, MANY_ARGS,
+    HELPK("% \"<b>show <i>mount</> [<o>/PATH</>]\"\r\n"
+          "%\r\n"
+          "% Display information about mounted filesystems, partitions.\r\n"
+          "% \"show mount\"           - display filesystem information\r\n"
+          "% \"show mount /my_disk\"  - display information about mountpoint \"/my_disk\""), "Mounted filesystems and fstab"},
+#endif
+  { "memory", cmd_show_memory, MANY_ARGS,
+    HELPK("% \"<b>show <i>memory</> [<o>map</>]\"\r\n"
+          "%\r\n"
+          "% Display HEAP information / availability / map"),"Memory map"},
+
+  { "memory", cmd_show_memory, MANY_ARGS,
+    HELPK("% \"<b>show <i>memory</> <i>ADDRESS</> [<o>COUNT</>] [<o>unsigned|signed|char|int|short|float|void *</>]\"\r\n"
+          "%\r\n"
+          "% Display COUNT elements starting from the memory address ADDRESS\r\n"
+          "% Data type can be provided (e.g. \"show mem 0x3fff0000 unsigned int\")\r\n"
+          "% to hint espshell on how to display individual data items. \r\n"
+          "%\r\n"
+          "% Default data type is \"unsigned char\"\r\n"
+          "% Address is either decimal or hex (with or without leading \"0x\")\r\n"
+          "%\r\n"
+          "% COUNT is optional and its default value is 256 bytes. Can be decimal or hex\r\n"
+          "% NOTE: if type specifier is used and COUNT is not set, then COUNT defaults to 1\r\n"
+          "% <u>Examples</>:\r\n"
+          "%   <b>show mem 0x3fff000</>              : display a 256 byte hexdump\r\n"
+          "%   <b>show mem 0x3fff000 10</>           : display 10 byte hexdump\r\n"
+          "%   <b>show mem 0x3fff000 int</>          : display 1 integer\r\n"
+          "%   <b>show mem 0x3fff000 10 uint16_t</>  : display 10 ushorts\r\n"
+          "%   <b>show mem 0x3fff000 10 float</>     : display 10 floats\r\n"
+          "%   <b>show mem 0x3fff000 10 float hex</> : display 10 floats as seen in RAM"),"Display memory content"},
+
+
+#if WITH_ESPCAM
+  { "camera", cmd_show_camera, MANY_ARGS,
+    HELPK("% \"<b>show <i>camera</> <i>models | resolutions | settings | sensor</>\"\r\n"
+          "%\r\n"
+          "% <i>models</>     : Displays list of supported boards\r\n"
+          "% <i>resolutions</>: List of supported resolutions\r\n"
+          "% <i>settings</>   : Displays current camera settings\r\n"
+          "% <i>sensor</>     : Displays camera low-level information\r\n"
+          "% Example: \"show camera settings\"\r\n"
+          ),"Camera parameters"},
+
+  { "camera", cmd_show_camera, MANY_ARGS,
+    HELPK("% \"<b>show <i>camera</> <i>pinout</> [<o>MODEL</> | <o>custom</>]\"\r\n"
+          "%\r\n"
+          "% Displays camera pinout for camera model MODEL\r\n"
+          "% Model name can be omitted and then current camera pinout is displayed\r\n"
+          "% Model name can be \"custom\" to display your custom camera pinout\r\n"
+          ),NULL},
+
+#endif
+
+#if WITH_ALIAS
+  { "alias", cmd_show_alias, MANY_ARGS,
+    HELPK("% \"<b>show</> <i>alias</> [<o>ALIAS_NAME</>]\"\r\n"
+          "%\r\n"
+          "% \"show alias\"     - Display list of configured aliases\r\n"
+          "% \"show alias NAME\"- Display alias NAME listing "), "Show aliases"},
+
+  { "if", cmd_show_ifs, MANY_ARGS,
+    HELPK("% \"<b>show <i>if</> [<o>NUM</>]\"\r\n"
+          "%\r\n"
+          "% Displays brief list of \"if\" conditions\r\n"
+          "% Displays details if condition ID is specified"),"Show conditions"},
+
+  { "every", cmd_show_ifs, MANY_ARGS,
+    HELPK("% \"<b>show <i>every</> [<o>NUM</>]\"\r\n"
+          "%\r\n"
+          "% Displays brief list of \"every\" conditions\r\n"
+          "% Displays details if condition ID is specified"),"Show periodic jobs"},
+
+#endif
+
+#if WITH_DEVEL
+  { "subdirs", cmd_show_subdirs, MANY_ARGS, HIDDEN_KEYWORD },
+#endif
+
+
+  /* Last entry must be all-zeros */
+  { NULL, NULL, 0, NULL, NULL }
+};
+
+KEYWORDS_REG(show);
+
+
+
+
+
+
+
+// Displayed when user tries to "exit" from the main commands directory.
+// Language-specific versions are in lang/keywords_ru.h
+const char *Exit_message   = "% Not in a subdirectory; (to close the shell type \"exit ex\")\r\n";
+
+// Displayed when user enters some command subdirectory
+const char *Subdir_message = "%% Entering %s mode. Ctrl+Z or \"exit\" to return\r\n"
+                             "%% Main commands are still available (but not visible in \"?\" command list)\r\n";
+#endif // #if !defined WITH_LANG
+
+
+// Current keywords list in use, 
+// It is an thread-specific variable (every task has its own copy of this variable)
+// Background commands obtain a copy of this variable and initialize their own (see struct helper_arg and its use)
+//
+static _Thread_local const struct keywords_t *keywords = KEYWORDS(main);
+
+
+////////////////////////////// functions and command handlers ///////////////////////
+
+// Register a command tree. This one called by a C startup code as part of KEYWORDS_REG() macro
+// well before app_main(), setup() or loop()
+//
+static void keywords_register(const struct keywords_t *key, const char *name, int const count) {
+  static unsigned char idx = 0;
+  MUST_NOT_HAPPEN(idx >= MAX_CMD_SUBDIRS);
+  Subdirs[idx].key = key;
+  Subdirs[idx].name = name;
+  Subdirs[idx].count = count;
+  idx++;
+}
+
+// Check, if given name can be a command directory
+//
+static bool is_command_directory(const char *p) {
+  if (p && *p) {
+    int idx = 0;
+
+    while(Subdirs[idx].name) {
+      if (!q_strcmp(p, Subdirs[idx].name))
+        return true;
+      idx++;
+    }
+  }
+  return false;
+}
+
+
+// Called from cmd_uart_if(), cmd_i2c_if(),cmd_seq_if() and others to set a new command list (command directory); 
+// Displays user supplied text,  returns a pointer to the keywords tree used before
+//
+static const struct keywords_t *change_command_directory(
+                                    uintptr_t context,            // An arbitrary number which will be stored until next directory change
+                                    const struct keywords_t *dir, // New command list 
+                                    const char *prom,             // New prompt
+                                    const char *text) {           // User-defined text which will be displayed after entering new directory
+  static uint8_t count = 0;                                    
+  const struct keywords_t *old_dir;
+
+  // Save user-supplied Context into thread-local variable
+  context_set(context);
+  old_dir = keywords_get();
+  // Set a new pointer to currently used keywords array; set the prompt
+  keywords_set_ptr(dir);
+  prompt_set(prom);
+
+  if (text && count < 3) {
+    count++;
+    HELP(q_printf(Subdir_message, text));
+  }
+
+  return old_dir;
+}
+
+//"exit"
+//"exit exit"
+// exits from a command subdirectory or closes the shell ("exit exit")
+//
+static int cmd_exit(int argc, char **argv) {
+  // Change directory to main, restore main prompt
+  // If "exit" was executed from the main tree, then either exit the shell or display a hint
+  if (change_command_directory(0, KEYWORDS(main), PROMPT, NULL) == KEYWORDS(main)) {
+    if (argc > 1 && !q_strcmp(argv[1], "exit"))
+      Exit = true; // Causes REPL to abort
+    else {
+      HELP(q_print( Exit_message ));
+    }
+  }
+  return 0;
+}
+
+#if WITH_DEVEL
+// Developer command "show subdirs"
+// Shows **registered** command directories.
+//
+static int cmd_show_subdirs(int argc, char **argv) {
+
+  int idx = 0, total = 0, hidden = 0;
+
+  // Go through all registered subdirs (see how KEYWORDS_REG() is used)
+  while(Subdirs[idx].key) {
+    int i = 0, ih = 0; // Number of commands/hidden commands
+    while(Subdirs[idx].key[i].cmd) {
+      i++;
+      if (Subdirs[idx].key[i].help == NULL && Subdirs[idx].key[i].brief == NULL)
+        ih++;
+    }
+    q_printf("Dir: \"%s\", %u entries, %u hidden\r\n", Subdirs[idx].name, i, ih);
+    total += i;
+    hidden += ih;
+    idx++;
+  }
+  q_printf("Total: %u entries (%u of them are hidden) in %u subdirs\r\n", total, hidden, idx);
+  return 0;
+}
+#endif //WITH_DEVEL
+
+
+#endif // #if COMPILING_ESPSHELL
+
+

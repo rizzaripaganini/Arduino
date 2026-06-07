@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>ESPShell: UART</title>
+  <link rel="stylesheet" href="espshell.css">
+  <meta charset="UTF-8">
+</head>
+<body>
+<p align=center><a href="index.html"><img src="i/espshell_logo.jpg" alt="ESPShell for Arduino :: UARTs" width="70%" height="70%" /></a></p>
+<h3 align=center><a href="UART.ru.html">[ На русском ]</a>&nbsp;&harr;&nbsp;<a href="UART.html">[ English ]</a></h3>
+<ul>
+  <li><a href="#uarts">UARTs on ESP32</a></li>
+  <li><a href="#send">Initializing UART: Sending and Receiving Data</a></li>
+  <li><a href="#tap">UART Bridge: Talk to Modems & GPS</a></li>
+</ul>
+
+<h2 id=uarts><a href="#top">&#8686;</a>UARTs on ESP32</h2>
+
+<p>
+The ESP32 has up to 3 hardware UARTs depending on the model (the basic ESP32 has 3 UARTs, while the ESP32-S2 has two). UART0 is used as the primary input/output port for both programming the chip and sketch I/O. In the Arduino framework, it is referenced as <span class=func>Serial0</span> or <span class=func>Serial</span>. (On USB-OTG-enabled boards, the USB port is used as the primary I/O.)
+</p><p>
+When ESPShell starts, it waits for the sketch to initialize <span class=func>Serial</span>. This is typically done in <span class=func>setup()</span>, like this:
+</p><p>
+<pre>
+void setup() {
+  ....
+  Serial.begin(115200);
+  ....
+}
+</pre>
+</p><p>
+Once ESPShell detects that <span class=func>Serial</span> is up and running, it begins reading and executing user commands.
+</p><p>
+The main idea is to simplify debugging of UART-to-UART communication between the ESP32 and another device (e.g., a GSM modem or GPS module). UART commands allow you to initialize a UART interface on arbitrary pins and communicate with the connected device.
+</p><p>
+In conjunction with the "<b>suspend</b>" command, this can also be used to reconfigure the UART used by the sketch (e.g., to adjust UART speed or change pin numbers).
+</p>
+
+<h2 id=send><a href="#top">&#8686;</a>Initializing UART: Sending and Receiving Data</h2>
+
+<p>
+UARTs are accessed using the "<b>uart</b> <i>UART_NUMBER</i>" command. After executing this command, the ESPShell prompt changes from "esp32#>" to "esp32-uartX>" (where X is the UART number), indicating that you are in UART configuration mode. Entering "?" and pressing &lt;Enter&gt; will show a full list of available commands:
+</p>
+<pre>
+ esp32#>ua 1
+ esp32-uart1>?
+ % Enter "? command" to get details about the command.
+ % List of available commands:
+ %
+ % "?"        : Show the list of available commands
+ % "up"       : Initialize UART (pins/speed)
+ % "baud"     : Set baud rate
+ % "down"     : Shut down
+ % "read"     : Read data from UART
+ % "tap"      : Talk to UART device
+ % "write"    : Send bytes over this UART
+ % "exit"     : Exit
+ esp32-uart1>
+</pre>
+<p>
+The output above shows that there are 6 UART-specific commands available, along with 2 common commands ("?" and "exit"). The question mark prints the command list, and "exit" (or Ctrl+Z) exits the UART configuration mode.
+</p><p>
+You can also use global commands from within the UART context. For example, the "<b>pin</b>" command works inside "esp32-uart1>" as well.
+</p>
+
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  
+  <tr><td><p>up</p></td><td>
+    <p><b>up</b> <i>RX_PIN</i> <i>TX_PIN</i> <i>SPEED</i> [<i>BITS</i> [no|even|odd [1|1.5|2]]]</p>
+    <p>Initializes the UART. If the UART is already up, this command does nothing.</p>
+    <p>The command has 3 mandatory parameters (RX pin, TX pin, baud rate) and 3 optional ones (data bits, parity, stop bits).</p>
+    <p>Baud rate can later be changed using the "<b>baud</b>" command.</p>
+    <p>No other UART-specific commands will work until "up" completes successfully.</p>
+    <p>Default values for optional parameters are: 8 data bits, no parity, 1 stop bit.</p>
+    <p>Valid <i>BITS</i> values: 5, 6, 7 or 8 bits. Parity: "no", "even", or "odd". Stop bits: 1, 1.5, or 2.</p>
+    <p>Example: Initialize UART2 on pins 18 and 19 at 115200 baud:</p>
+<pre>
+  esp32#>uart 2
+  esp32-uart2>up 18 19 115200
+</pre>
+
+    <p>Example: Initialize UART2 on pins 18 and 19 at 9600 baud, 8 data bits, 1 stop bit, "even" parity:</p>
+<pre>
+  esp32#>uart 2
+  esp32-uart2>up 18 19 9600 8 even 1
+</pre>
+
+  </td></tr>
+
+  <tr><td><p>down</p></td><td>
+    <p><b>down</b></p>
+    <p>Shuts down the previously initialized UART. If the UART is not up, the command has no effect.</p>
+    <p>Note: Your sketch may still be reading/writing on the UART when you run "down". Use the global "<b>suspend</b>" command to pause the sketch and avoid undefined behavior.</p>
+  </td></tr>
+
+  <tr><td><p>baud</p></td><td>
+    <p><b>baud</b> <i>SPEED</i></p>
+    <p>Changes the UART speed. Changing the baud rate on UART0 may cause you to lose connection with your serial monitor. Adjust its baud rate accordingly.</p>
+  </td></tr>
+
+  <tr><td><p>read</p></td><td>
+    <p><b>read</b></p>
+    <p>Reads all bytes available at the moment of execution. Printable characters (including \t, \n, \r) are shown as-is. Non-printable characters are shown as "\0xAB", where AB is the hex value.</p>
+  </td></tr>
+
+  <tr><td><p>write</p></td><td>
+    <p><b>write</b> <i>TEXT1</i> <i>TEXT2</i> ... <i>TEXTn</i></p>
+    <p>Sends strings of bytes over UART. You can use printable characters or special sequences: "\n", "\r", "\t", "\\" for LF, CR, TAB, and backslash. Arbitrary bytes can be sent using <b>\AB</b> where AB is the hex value.</p>
+    <p>Multiple spaces are compressed to one (commands "<b>write Hello&nbsp;&nbsp;&nbsp;&nbsp;World!</b>" and "<b>write Hello World!</b>" are equivalent.). To send several spaces, use "\20" (ASCII 32): : "<b>write</b> Hello\20\20\20World!"</p>
+    <p>Using command "<b>write</b>" on UART0 sends data directly to your serial monitor:</p>
+
+    <p align=center>
+      <img src="i/uart0_write.jpg" width="70%" height="70%" alt="Typical view" /><br>
+      <i>Fig. 1: "write" command executed on UART0</i>
+    </p>
+
+    <p>Example: Communicate with a SIMCOM SIM7600E modem on pins 21 (RX) and 22 (TX):</p>
+<pre>  
+  esp32#>uart 2
+  esp32-uart2>up 21 22 115200
+  esp32-uart2>write \ff\ff\CC\r\n    &larr; Send junk bytes: ignored by the modem
+  5 bytes sent 
+  esp32-uart2>write ATI\r\n          &larr; Send ATI command
+  5 bytes sent
+  esp32-uart2>read                   &larr; Read reply
+  ATI
+  Manufacturer: SIMCOM INCORPORATED
+  Model: SIMCOM_SIM7600E
+  Revision: SIM7600M21-A_V1.1
+  IMEI: 861005075537800
+  +GCAP: +CGSM
+ 
+  OK
+  
+  137 bytes read
+</pre>
+<p>This example shows how to set up a UART and send the "ATI" command to a device on UART2. The first "write" sends junk, the second sends a valid command. "read" retrieves the modem's response.</p>
+  </td></tr>
+</table>
+
+<h2 id=tap><a href="#top">&#8686;</a>Talking Directly to the Device</h2>
+<p>
+If you have a GSM/LTE modem connected to your ESP32's UART, you may want to send AT commands. Or maybe you have a GPS module and want to monitor its NMEA output. Or perhaps two ESP32s are connected via UART, both running ESPShell, and you'd like to run remote shell commands.
+</p>
+<p>
+All this is possible using the "<b>tap</b>" command, which creates a bridge between the user terminal (e.g., UART0) and another UART:
+</p>
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  
+  <tr><td><p>tap</p></td><td>
+    <p><b>tap</b></p>
+    <p>Bridges the user terminal to the connected UART device. All output from the UART is forwarded to the user, and all user input is sent to the UART. This is especially useful for debugging modems with AT commands.</p>
+    <p><b>Note:</b> Arduino Serial Monitor does not support pressing <kbd>Ctrl+C</kbd> to exit tap mode.</p>
+
+    <p>Example: Communicate with a SIM7600E modem on pins 18 (RX) and 19 (TX), send the ATI command, and exit:</p>
+<pre> 
+  esp32#>uart 1
+  esp32-uart1>up 18 19 115200
+  esp32-uart1>tap
+  Tapping to UART1, CTRL+C to exit
+  ATI                               &larr; Sent by user
+  Manufacturer: SIMCOM INCORPORATED &larr; This and below: a modem reply
+  Model: SIMCOM_SIM7600E
+  Revision: SIM7600M21-A_V1.1
+  IMEI: 861005075537800
+  +GCAP: +CGSM
+
+  OK
+
+  Exit                              &larr; Ctrl+C pressed
+  esp32#>
+</pre> 
+  </td></tr>
+</table>
+</body>
+</html>

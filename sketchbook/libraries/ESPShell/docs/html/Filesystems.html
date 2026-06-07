@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>ESPShell : Filesystems</title>
+  <link rel="stylesheet" href="espshell.css">
+  <meta charset="UTF-8">
+</head>
+<body>
+<p align=center><a href="index.html"><img src="i/espshell_logo.jpg" alt="ESPShell for Arduino :: File systems" width="70%" height="70%" /></a></p>
+<h3 align=center><a href="Filesystems.ru.html">[ На русском ]</a>&nbsp;&harr;&nbsp;<a href="Filesystems.html">[ English ]</a></h3>
+<p>
+  <ul>
+    <li><a href="#fs">ESP32 file systems</a></li>
+    <li><a href="#purpose">ESPShell's file manager purpose</a></li>
+    <li><a href="#cmds">File manager commands</a></li>
+    <li>&nbsp;&nbsp;<a href="#mount0">Show partition table & mounted filesystems : "<b>mount</b>"</a></li>
+    <li>&nbsp;&nbsp;<a href="#mount">Mount partition</a></li>
+    <li>&nbsp;&nbsp;<a href="#unmount">Unmount partition previously mounted with "mount" : "unmount [path]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#format">Format filesystem : "<b>format</b> [label]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#ls">Directory listing : "<b>ls</b> [path]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#cd">Change directory : "<b>cd</b> [path|..]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#rm">Delete files/directories : "<b>rm</b> path"</a></li>
+    <li>&nbsp;&nbsp;<a href="#write">Write bytes : "<b>write</b> path [text]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#append">Append bytes : "<b>append</b> path text"</a></li>
+    <li>&nbsp;&nbsp;<a href="#insert">Insert bytes into text file : "<b>insert</b> path line_num [text]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#delete">Delete lines in text file : "<b>delete path</b> line_num [count]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#mkdir">Create directory/ies : "<b>mkdir</b> path1 path2 ... pathn"</a></li>
+    <li>&nbsp;&nbsp;<a href="#touch">Create new or update timestamps on existing file(s) : "<b>touch</b> path1 path2 ... pathn"</a></li>
+    <li>&nbsp;&nbsp;<a href="#cat">Display/transmit text/binary file : "<b>cat</b> [-n|-b] path [line_num [count]] [uart num]"</a></li>
+    <li>&nbsp;&nbsp;<a href="#mv">Move/rename files or directories : "<b>mv</b>"</a></li>
+    <li>&nbsp;&nbsp;<a href="#cp">Copy files or directories : "<b>cp</b>"</a></li>
+    <li>&nbsp;&nbsp;<a href="#show">Displaying information : "<b>show mount</b> [PATH]"</a></li>
+  </ul>
+</p>
+
+<p><h2 id=fs><a href="#top">&#8686;</a>ESP32 FILESYSTEMS</h2></p>
+
+<p>
+As of 2025, there are three filesystems commonly used on ESP32 in IDF and 
+Arduino projects: LittleFS, FAT, and SPIFFS (the latter is being deprecated soon). 
+All three filesystems are supported by ESPShell in its tiny file manager.
+</p><p>
+There is a sample "partitions.csv" file that defines all three filesystems for 
+testing purposes. This file, when placed in the sketch directory, will be used 
+during the firmware upload process.
+</p><p>
+The following common storage media are supported:
+</p><p>
+<ul>
+  <li>Internal flash memory: This is where your sketch gets uploaded.</li>
+  <li>SD card on SPI interface.</li>
+</ul>
+</p><p>
+SDMMC with full 4-bit data lines is the fastest way to read/write SD cards. However, 
+many devboards have only one data line connected (for example, the ESP32Cam). 
+SDMMC in 1-bit mode is still faster than using an SD card on the SPI interface.
+</p>
+
+<p><h2 id=purpose><a href="#top">&#8686;</a>ESPSHELL'S FILE MANAGER PURPOSE</h2></p>
+
+</p><p>
+The main purpose of ESPShell's file manager is to copy, move, rename, and delete 
+files and directories that may be used by the sketch. Examples include configuration 
+files, images from the camera, web server pages, logs, and so on.
+</p><p>
+ESPShell allows for copy and move operations across different filesystems. For example, 
+a file can be copied or moved from FAT to LittleFS.
+</p><p>
+The shell supports SD memory cards over the SPI bus.
+</p><p>
+Additionally, ESPShell provides basic binary and text file editing capabilities. 
+Users can create files, append strings or bytes to files, and insert or remove lines 
+in text files.
+</p>
+
+<p><h2 id=cmds><a href="#top">&#8686;</a>FILE MANAGER COMMANDS</h2></p>
+</p><p>
+To enter the file manager mode, type "<b>files</b>" and press &lt;Enter&gt;:
+</p><p><pre>
+  esp32#>files
+  % Entering filesystem configuration mode. Ctrl+Z or "exit" to return
+  % Main commands are still avaiable (but not visible in "?" command list)
+  esp32#(/)>
+</pre>
+</p><p>
+Now, you can see the current working directory displayed in the prompt, in 
+brackets. This is called the root directory. The root directory is virtual 
+and cannot be used like other directories. It is impossible to create files 
+or directories in the root directory. It is used exclusively to hold mount 
+points.
+</p><p>
+A mount point is a directory whose name starts with "/", 
+for example, "/wwwroot", where the actual filesystem is deployed.
+</p>
+<p>
+<b>NOTE:</b> Changing the current directory affects only ESPShell itself and <b>does not affect the sketch in any way</b>.
+The sketch can still call "<b>chdir()</b>" and "<b>getcwd()</b>" as before, and its current working directory may differ from the shell’s current directory.
+This behavior is intentional, because the philosophy of ESPShell is to avoid influencing the “parent” sketch whenever possible.
+</p>
+<p>
+<b>NOTE:</b> If you want to include spaces (" ") in your path, use quotes OR use an asterisk "*" 
+instead of spaces. ESPShell will convert the asterisks to spaces in paths and 
+filenames. ESPShell does not support:        
+</p><p><ul><li>
+  File name completion, </li><li>
+  Path wildcards (i.e ".", "*" and "?" in the path)</li></ul>
+</p><p>
+Now, let's take a look at the file manager commands (you can exit file manager
+mode by pressing Ctrl+Z or typing "exit" and pressing &lt;Enter&gt;):
+</p><p><pre>
+  esp32#(/)>?
+  % Enter "? command" to get details about specific command.
+  % Enter "? keys" to display the espshell keyboard help page
+  %
+  % "?"          : Commands list & help
+  % "mount"      : Mount partition/Show partition table
+  % "unmount"    : Unmount partition
+  % "ls"         : List directory
+  % "pwd"        : Working directory
+  % "cd"         : Change directory
+  % "rm"         : Delete files
+  % "mv"         : Move/Rename files
+  % "cp"         : Copy files
+  % "write"      : Write bytes
+  % "append"     : Append bytes
+  % "insert"     : Insert bytes
+  % "delete"     : Delete lines
+  % "mkdir"      : Create directory
+  % "cat"        : Display text/binary file
+  % "touch"      : Touch/Create file
+  % "format"     : Erase old & create new filesystem
+  % "exit"       : Exit
+  esp32#(/)>
+</pre>
+</p>
+<p><h3 id=mount0><a href="#top">&#8686;</a>SHOW PARTITION TABLE & MOUNTED FILESYSTEMS: "mount"</h3></p>
+<p>
+The command without arguments displays the partition table and some information 
+about mounted filesystems (the command "mount" was shortened to "m"):
+</p><p><pre>
+  esp32#(/)>m
+  %  Partition label |   Type    |   Size  |    Mounted on    |Total(Kb)|Free(Kb)
+  % -----------------+-----------+---------+------------------+---------+--------
+  %              nvs | NVStorage |    20Kb |                  |         |
+  %          otadata |  OTA data |     8Kb |                  |         |
+  %          wwwroot | FAT/exFAT |   960Kb |          /wwwroot|     920 |    920
+  %             pr0n |    SPIFFS |   480Kb |                  |         |
+  %             logs |  LittleFS |   480Kb |             /logs|     480 |    464
+  %         coredump | Core dump |    64Kb |                  |         |
+  %
+  % 3 mountable partitions found
+  esp32#(/)>
+</pre>
+The output above shows that there are 3 different partitions, two of which 
+are mounted under "/wwwroot" and "/logs". The "Size" column represents the 
+raw filesystem size as it appears on the flash chip. The "Total" and "Free" 
+columns display the total and available space within the filesystems.
+</p>
+
+
+<p><h3 id=mount><a href="#top">&#8686;</a>MOUNT PARTITION: "mount LABEL [/PATH]"</h3></p>
+<p>
+
+This command, when used with one or two arguments, mounts filesystems located on 
+the flash partition with the specified LABEL under the specified /PATH. 
+If /PATH (a mount point) is not provided, it is automatically generated by 
+combining "/" with the partition label (as shown in the previous screenshot).
+</p><p>
+If the filesystem fails to mount, it will be formatted and the process will be retried.
+</p><p>
+The LABEL can be shortened, but this does not affect the generated mount point - it 
+will still be the full label name:
+</p><p><pre>
+
+  esp32#(/)>mount www
+  %  FAT/exFAT  on partition "wwwroot" is mounted under "/wwwroot"
+  esp32#(/)>
+</pre>
+Here we used short label name ("www" instead of "wwwroot") but it was treated as if it 
+was full name. The mountpoint was omitted and autogenerated from partition label name 
+and "/"
+</p><p>
+Once mounted the filesystem is accessible under /PATH ("/wwwroot" in this case): user 
+can "cd /wwwroot" and explore/modify the filesystem
+</p><p>
+In this example, we used the shortened label "www" instead of "wwwroot", but the 
+system treated it as the full label name. The mount point was automatically 
+generated based on the partition label and "/".
+</p><p>
+Once the filesystem is mounted, it can be accessed under /PATH (in this case, 
+/wwwroot). The user can then use the cd command to navigate and explore/modify 
+the filesystem:
+</p><p>
+Example: Mount the filesystem on the "wwwroot" partition under the mount point "/my/point":
+<pre>
+  esp32#(/)>mount wwwroot /my/point
+  %  FAT/exFAT  on partition "wwwroot" is mounted under "/my/point"
+  esp32#(/)>
+</pre>
+</p>
+<p><h3 id=sd><a href="#top">&#8686;</a>MOUNTING AN SD CARD</h3></p>
+
+<p>
+"mount spi1|spi2|spi3|hspi|fspi|vspi MOSI MISO CLK CS [FREQ_KHZ] [/PATH]"
+</p><p>
+An SD card on an SPI bus can be mounted using the command above. The first argument specifies 
+the SPI interface to use. The safest choice, which will work with all ESP32 models, is "hspi". 
+Both the Arduino SPI interface naming convention and ESP-IDF (spi1, spi2, etc.) naming 
+conventions are supported.
+</p><p>
+MOSI, MISO, CLK, and CS are the SPI bus pins (these are arbitrary GPIO pins where your SD 
+card is connected).
+</p><p>
+FREQ_KHZ is an optional parameter specifying the SPI bus frequency. By default, SD cards 
+are mounted and accessed at 20 MHz. However, when using longer connecting wires, such as 
+on breadboards, it may be necessary to use a lower frequency (as low as 400 kHz) to avoid 
+data transmission errors.
+</p>
+
+
+<p><h3 id=unmount><a href="#top">&#8686;</a>UNMOUNT PARTITION PREVIOUSLY MOUNTED WITH "MOUNT" : "unmount [PATH]"</h3></p>
+
+<p>
+Opposite of "mount" : unregister filesystems. Takes one optional argument: the mountpoint
+path. If mountpoint is not specified then it is derived from the current working directory:
+</p><p>
+The unmount command is the opposite of mount - it unregisters filesystems. It takes one 
+optional argument: the mountpoint path. If the mountpoint is not specified, it is derived 
+from the current working directory:
+</p><p><pre>
+
+  esp32#(/wwwroot/1/2/)>unmount
+  % Unmounted  FAT/exFAT  partition "/wwwroot"
+  esp32#(/)>
+</pre>
+There is also command "umount" which is simply an alias for "unmount"
+</p>
+
+
+<p><h3 id=format><a href="#top">&#8686;</a>FORMAT FILESYSTEM : "format [LABEL]"</h3></p>
+
+<p>
+The format command is used to format the partition specified by the LABEL. If 
+the LABEL is omitted, ESPShell derives the partition label from the current working directory:
+</p><p><pre>
+  esp32#(/wwwroot/)>format
+  % Formatting partition "wwwroot", file system type is " FAT/exFAT "
+  % done
+  esp32#(/wwwroot/)>
+</pre>
+The filesystem type is defined by the partitions.csv file and cannot be changed at runtime. 
+For FAT filesystems, a quick format is performed (no data is erased, only the file allocation 
+tables are cleared).
+</p>
+
+<p><h3 id=ls><a href="#top">&#8686;</a>DIRECTORY LISTING : "ls [PATH]"</h3></p>
+
+<p>
+The "ls" command displays a directory listing. If the PATH is omitted, the current working 
+directory is used:
+<pre>
+  esp32#(/wwwroot/)>ls
+  %    Size        Modified          *  Name
+  %               -- level up --    DIR [..]
+  %       171  1980-01-01 01:43:26  DIR [index]
+  %       146  1980-01-01 01:43:26  DIR [logs]
+  %         0  1980-01-01 01:43:26  DIR [uphp]
+  %         0  1980-01-01 01:43:26  DIR [tmp]
+  %        57  1980-01-01 01:46:18      index.html
+  %
+  % 4 directories, 1 file, 374 bytes
+  esp32#(/wwwroot/)>
+</pre>
+Displayed information: file/directory last modification time, file size in bytes, entry 
+type (directories marked as DIR, files have no makrkings) and file/directory name.
+</p><p>
+Displayed information includes:
+</p><p>
+  Size: File or directory size in bytes<br />
+  Modified: Last modification time<br />
+  Type: Directories are marked as DIR, and files have no marking<br />
+  Name: File or directory name, with directory names displayed in square brackets.<br />
+  The special .. directory (to go up one level) is also shown.
+</p><p>
+The entries are ordered by creation time, with no sorting applied.
+</p><p>
+Example: Display the content of the /wwwroot/index/ directory:
+<pre>
+  esp32#(/)>ls wwwroot/index
+  %    Size        Modified          *  Name
+  %               -- level up --    DIR [..]
+  %        57  1980-01-01 01:45:00      index.php
+  %        57  1980-01-01 01:45:16      index_old.php
+  %        57  1980-01-01 01:45:26      index_html
+  %
+  % 0 directories, 3 files, 171 bytes
+  esp32#(/)>
+</pre>
+The PATH argument must be a directory path, with or without a trailing /.
+</p><p>
+Important: By default, the ls command displays the total size of directories, calculated recursively. 
+This may take time and consume memory. If this is an issue, you can change the behavior by running 
+the command <b>"var ls_show_dir_size 0"</b>, which will disable directory size reporting in the ls command.
+</p>
+
+
+<p><h3 id=cd><a href="#top">&#8686;</a>CHANGE DIRECTORY : "cd [PATH]"</h3></p>
+
+<p>
+There are three variations of the "cd" command:
+</p><p>
+  1. "cd"
+  Without parameters, changes the current working directory (CWD) to the root of the 
+  currently mounted filesystem (not to be confused with the root directory /, which is 
+  the global root for all filesystems):
+<pre>
+        esp32#(/wwwroot/1/2/)>cd
+        esp32#(/wwwroot/)>
+</pre>
+</p><p>
+  2. "cd .."
+  Changes the current directory to its parent. Paths like "dir/../.././dir2" are ok.
+  If the parent directory does not exist (as is often the case with complex mountpoints
+  like /my/mount/point/ where intermediate directories /my and /mount do not physically
+  exist), then cd .. continues upward until a valid directory is reached.
+<pre>
+       esp32#(/)>mount wwwroot /a/mount/point
+       %  FAT/exFAT  on partition "wwwroot" is mounted under "/a/mount/point"
+       esp32#(/)>cd /a/mount/point
+       esp32#(/a/mount/point/)>cd ..
+       esp32#(/)>
+</pre>
+  In this case, cd .. brings us back to /, not to /a/mount, because /a/mount/point is 
+  treated as a single virtual mount path rather than a nested directory structure.
+</p><p>
+  3. "cd PATH"
+  Changes the current working directory to PATH, similar to Linux or Windows shells.
+  Absolute paths must start with a mountpoint
+</p><p>
+  Relative paths are interpreted relative to the current directory
+<pre>
+       esp32#(/wwwroot/)>cd test_dir/dir2       # change dir (relative path)
+       esp32#(/wwwroot/test_dir/dir2/)>cd       # back to filesystem root
+       esp32#(/wwwroot/)>cd ..                  # and 1 more level up 
+       esp32#(/)>cd /wwwroot/test_dir/../.././dir2/
+</pre>
+</p>
+
+
+<p><h3 id=rm><a href="#top">&#8686;</a>DELETE FILES/DIRECTORIES : "rm PATH"</h3></p>
+
+<p>
+Deletes the file or directory specified by PATH.
+</p><p>
+<ul>
+  <li>If PATH is a file, it will be deleted.</li>
+  <li>If PATH is a directory, the directory and all of its contents will be deleted recursively, <b>with no confirmation!</b></li>
+  <li>If PATH is a dot ("." or "./"), the entire contents of the current directory will be removed recursively, <b>without confirmation</b></li>.
+</ul>
+<pre>
+  esp32#(/)>ls wwwroot/test_dir
+  % Size/Used      Modified          *  Name
+  %               -- level up --    DIR [..]
+  %            1980-01-01 01:00:24  DIR [dir2]
+  %         4  1980-01-01 01:16:20      test.cfg
+  %
+  % 1 directory, 1 file, 4 bytes
+
+
+  esp32#(/)>rm wwwroot/test_dir
+  % Directory removed: "/wwwroot/test_dir/dir2/"
+  % File removed: "/wwwroot/test_dir/test.cfg"
+  % Directory removed: "/wwwroot/test_dir/"
+  % 3 files/directories were deleted
+  esp32#(/)>
+</pre>
+  Directories in the root "/" (virtual root of all mountpoints) cannot be deleted with "rm": for example "rm /wwwroot" will fail.
+  To remove those, use the unmount command instead.
+</p>
+
+<p><h3 id=write><a href="#top">&#8686;</a>WRITE BYTES : "write PATH [TEXT]"</h3></p>
+<p>
+Writes an arbitrary string of bytes or characters to a file. If the file does not exist, it is created.
+If the file exists, its entire content is overwritten each time "write" is used.
+</p><p>
+To append or modify files without overwriting, use the commands "append", "insert", or "delete".
+</p><p>
+The TEXT argument (data to be written) can include:
+</p><p>
+  regular characters and spaces, escape sequences:
+<pre>
+    \\  = backslash
+    \n  = newline
+    \r  = carriage return
+    \t  = tab
+    \AB = byte with hexadecimal value AB
+</pre>
+If TEXT is omitted, a single newline (\n) is written.
+</p><p>
+  Example 1: Create a new file test.cfg (or overwrite an existing one) with the "Hello World!", and the next line consisting of bytes 61 62 63 64 65 \n:
+<pre>
+
+  esp32#(/wwwroot/)>write test.cfg Hello World\n\61\62\63\64\65\n
+  % 18 bytes written
+  esp32#(/wwwroot/)>
+</pre>
+If PATH includes subdirectories that don't yet exist, they will be automatically created.
+
+</p>
+
+<p><h3 id=append><a href="#top">&#8686;</a>APPEND BYTES : "append PATH TEXT"</h3></p>
+
+<p>
+Appends data to the end of an existing file - works similarly to the write command, 
+but does not erase existing content.
+<pre>
+  esp32#(/wwwroot/)>append test.cfg \nNew line
+  % 9 bytes written
+  esp32#(/wwwroot/)>
+</pre>
+  Use "write" to overwrite a file, or "insert" / "delete" to modify specific lines.
+</p>
+
+
+<p><h3 id=insert><a href="#top">&#8686;</a>INSERT BYTES INTO TEXT FILE : "insert PATH LINE_NUM [TEXT]"</h3></p>
+
+<p>
+Inserts TEXT (which may include multiple lines separated by \n) before the line number LINE_NUM 
+in the file at PATH.
+Note: A final \n is automatically added to each inserted line - there's no need to manually include 
+\n at the end of every string unless you're inserting multiple lines.
+</p><p>
+
+  Example: Display a file, insert a multiline string into the file:
+<pre>
+  esp32#(/wwwroot/)>cat -n index.html
+     1: <html>
+     2: <head></head>
+     3: <body>
+     4: Hello World!
+     5: </body>
+     6: </html>
+     7:
+  esp32#(/wwwroot/)>insert index.html 4 Hey! This line was inserted!\nAnd this line also!
+  %% Line inserted
+  esp32#(/wwwroot/)>cat -n index.html
+     1: <html>
+     2: <head></head>
+     3: <body>
+     4: Hey! This line was inserted!
+     5: And this line also!
+     6: Hello World!
+     7: </body>
+     8: </html>
+     9:
+  esp32#(/wwwroot/)>
+</pre>
+As with the write command, escape sequences like \n, \r, \t, and \XX (hex byte) are supported.
+If TEXT is omitted entirely, a single newline (empty line) is inserted.
+</p>
+
+<p><h3 id=delete><a href="#top">&#8686;</a>DELETE LINES IN TEXT FILE : "delete PATH LINE_NUM [COUNT]"</h3></p>
+
+</p>
+Deletes COUNT lines starting from line number LINE_NUM in the file PATH.
+If COUNT is omitted, it defaults to 1:
+<pre>
+  esp32#(/wwwroot/)>cat -n index.html
+   1: <html>
+   2: <head></head>
+   3: <body>
+   4: Hey! This line was inserted!
+   5: And this line also!
+   6: Hello World!
+   7: </body>
+   8: </html>
+   9:
+  esp32#(/wwwroot/)>delete index.html 4 2
+  % 2 lines deleted starting at line 4
+  esp32#(/wwwroot/)>cat -n index.html
+   1: <html>
+   2: <head></head>
+   3: <body>
+   4: Hello World!
+   5: </body>
+   6: </html>
+   7:
+</pre>
+</p>
+
+<p><h3 id=mkdir><a href="#top">&#8686;</a>CREATE DIRECTORY/IES : "mkdir PATH1 PATH2 ... PATHn"</h3></p>
+
+<p>
+Creates one or more directories. Nested path creation is supported - for 
+example, "mkdir 1/2/3/4" will create all missing intermediate directories as needed.
+</p><p>
+Example 1: Create multiple directories under /wwwroot
+<pre>
+  esp32#(/)>cd wwwroot
+  esp32#(/wwwroot/)>mkdir 1 2 3
+  % Directory created: "/wwwroot/1/"
+  % Directory created: "/wwwroot/2/"
+  % Directory created: "/wwwroot/3/"
+  esp32#(/wwwroot/)>
+</pre>
+
+This command cannot create directories directly in the root / directory - use 
+the "mount" command to create or define new entries under /.
+</p><p>
+NOTE on paths with spaces:
+  If you need spaces in directory or file names, use an asterisk (*) instead of a space, or you can enclose your path in double quotes <b>&quot;</b>Like This<b>&quot;</b>.
+  ESPShell will automatically convert asterisks to spaces during path processing. 
+</p><p>
+  Example:
+<pre>
+  esp32#(/wwwroot/)>mkdir My*Documents
+  % Directory created: "/wwwroot/My Documents/"
+  esp32#(/wwwroot/)>mkdir "Program Files"
+  % Directory created: "/wwwroot/Program Files/"
+</pre>
+
+</p>
+
+<p><h3 id=touch><a href="#top">&#8686;</a>CREATE NEW OR UPDATE TIMESTAMPS ON EXISTING FILE(S) : "touch PATH1 PATH2 ... PATHn"</h3></p>
+<p>
+This command works similarly to its Linux counterpart:
+</p><p>
+  It creates new empty files if they don't exist.<br>
+  It updates modification timestamps on existing files.<br>
+  If the specified PATH includes subdirectories, ESPShell will automatically create all required directories leading up to the file.<br>
+</p><p>
+  Example 1: Create multiple new files in the current directory
+<pre>
+  esp32#(/wwwroot/)>touch file1.txt file2.txt file3.txt
+  % File created: "/wwwroot/file1.txt"
+  % File created: "/wwwroot/file2.txt"
+  % File created: "/wwwroot/file3.txt"
+  esp32#(/wwwroot/)>
+</pre>
+
+  Example 2: Update timestamp of an existing file
+<pre>
+  esp32#(/wwwroot/)>touch file1.txt
+  esp32#(/wwwroot/)>
+</pre>
+
+  Example 3: Create a file in a nested directory (with auto-creation of missing folders)
+<pre>
+  esp32#(/wwwroot/)>touch dir1/dir2/config.json
+  % Directory created: "/wwwroot/dir1/"
+  % Directory created: "/wwwroot/dir1/dir2/"
+  % File created: "/wwwroot/dir1/dir2/config.json"
+  esp32#(/wwwroot/)>
+</pre>
+</p>
+
+<p><h3 id=cat><a href="#top">&#8686;</a>DISPLAY/TRANSMIT TEXT/BINARY FILE : "cat [-n|-b] PATH [LINE_NUM [COUNT]] [uart NUM]"</h3></p>
+
+</p>
+This command displays the content of a file (text or binary) or transmits it over a UART port.
+Unlike its Linux counterpart, ESPShell's cat command does not support multiple files (so it can not be used to join files).
+</p><p>
+BASIC USAGE
+</p><p>
+To display a file as plain text:
+<pre>
+  esp32#(/wwwroot/)>cat index.html
+  <html>
+  <head></head>
+  <body>
+  Hey! This line was inserted!
+  And this line also!
+  Hello World!
+  </body>
+  </html>
+  esp32#(/wwwroot/)>
+</pre>
+</p><p>
+DISPLAY SPECIFIC LINES
+</p><p>
+You can use the LINE_NUM and COUNT arguments to display only part of the file:
+<pre>
+  esp32#(/wwwroot/)>cat index.html 4 2
+  Hey! This line was inserted!
+  And this line also!
+  esp32#(/wwwroot/)>
+</pre>
+SHOW LINE NUMBERS
+</p><p>
+Use -n to prefix each line with its line number. Useful when using insert or delete:
+<pre>
+   esp32#(/wwwroot/)>cat -n index.html
+   1: <html>
+   2: <head></head>
+   3: <body>
+   4: Hey! This line was inserted!
+   5: And this line also!
+   6: Hello World!
+   7: </body>
+   8: </html>
+   esp32#(/wwwroot/)>
+</pre>
+DISPLAY FILE AS BINARY (HEX + ASCII)
+</p><p>
+Use -b to interpret file contents as binary and display a hex dump:
+<pre>
+
+  esp32#(/wwwroot/)>cat -b index.html
+         0  1  2  3   4  5  6  7   8  9  A  B   C  D  E  F  |0123456789ABCDEF
+  ----------------------------------------------------------+----------------
+  0000: 3c 68 74 6d  6c 3e 0a 3c  68 65 61 64  3e 3c 2f 68  |<html>.<head></h
+  0010: 65 61 64 3e  0a 3c 62 6f  64 79 3e 0a  48 65 79 21  |ead>.<body>.Hey!
+  0020: 20 54 68 69  73 20 6c 69  6e 65 20 77  61 73 20 69  | This line was i
+  0030: 6e 73 65 72  74 65 64 21  0a 41 6e 64  20 74 68 69  |nserted!.And thi
+  0040: 73 20 6c 69  6e 65 20 61  6c 73 6f 21  0a 48 65 6c  |s line also!.Hel
+  0050: 6c 6f 20 57  6f 72 6c 64  21 0a 0a 0a  3c 2f 62 6f  |lo World!...</bo
+  0060: 64 79 3e 0a  3c 2f 68 74  6d 6c 3e 0a  0a           |dy>.</html>..
+  % EOF (109 bytes)
+  esp32#(/wwwroot/)>
+</pre>
+
+
+TRANSMIT FILE OVER UART
+</p><p>
+The cat command can also be used to send file content over an initialized UART interface. 
+When the -b option is used, the file's raw content (binary data) is transmitted over UART, 
+without formatting or line numbers.
+</p><p>
+This is especially useful for transferring files to devices connected via UART. For example, 
+the SIM7600 LTE module, which has a 64GB internal storage, can be used to send large files 
+over LTE. The transfer is handled by the module itself, reducing CPU load on the host device.
+<pre>
+  esp32#(/wwwroot/)>cat -b firmware.bin uart 2
+  % Binary file sent over UART2 (14832 bytes)
+  esp32#(/wwwroot/)>
+</pre>
+</p>
+
+
+<p><h3 id=mv><a href="#top">&#8686;</a>MOVE / RENAME FILES AND DIRECTORIES: "mv"</h3></p>
+<p>
+TBD. The "<b>mv</b>" command is similar to its Linux counterpart, but with some differences:
+the command cannot move the *contents* of a directory. For example, if you run (while being in the /ffat/5 directory)
+something like:
+"mv . ../6", then instead of moving the files from the directory, the entire /ffat/5 directory will be moved.
+</p>
+
+<pre>
+esp32#(/ffat/5/)>mv . ../6
+% Moving/renaming "/ffat/5" to "/ffat/6".. Done
+esp32#(/ffat/5/)>
+</pre>
+
+<p>
+As a temporary workaround, you can use "cp" and "rm" — these commands interpret the dot (".") specifically as
+"the contents of the directory".
+</p>
+
+<p><h3 id=cp><a href="#top">&#8686;</a>COPY FILES AND DIRECTORIES: "cp"</h3></p>
+<p>
+TBD. The "<b>cp</b>" command is similar to its Linux counterpart, but with some differences:
+since ESPShell does not support wildcards (i.e. names like "*.txt" or "backup.?bk"),
+copying the contents of a directory is done as follows:
+<pre>
+  esp32#(/wwwroot/)>cp . ../dir
+</pre>
+To specify the source as the contents of the current directory, use a dot (".").
+</p>
+
+
+<p><h3 id=show><a href="#top">&#8686;</a>DISPLAYING INFORMATION</h3></p>
+
+<p>
+"show mount [/PATH]" 
+</p><p>
+The "show mount" command displays information about mounted filesystems.
+Without arguments, it shows a list of available partitions and mountpoints for partitions that are already mounted:
+<pre>
+    esp32#>sh mount
+    % Disk partition |M|File system| Size on |    Mounted on    |Capacity |  Free
+    %    label       |?|   type    |  flash  |                  |  total  |  space
+    % ---------------+-+-----------+---------+------------------+---------+---------
+    %             nvs| | NVStorage |     20K |                  |         |
+    %         otadata| |  OTA data |      8K |                  |         |
+    %         wwwroot|+| FAT/exFAT |    960K |         /wwwroot |    916K |    916K
+    %            pr0n|+|    SPIFFS |    480K |                  |         |
+    %            logs|+|  LittleFS |    480K |                  |         |
+    %        coredump| | Core dump |     64K |                  |         |
+    %
+    % 3 mountable partitions found. (+) - mountable partition
+    esp32#>
+</pre>
+This keyword is an alias to "mount" filesystem command.
+</p><p>
+Used with 1 argument (a directory path) displays information on a given mountpoint:
+<pre>
+    esp32#>sh mount /w
+    % Mount point "/wwwroot",  FAT/exFAT , (partition label is "wwwroot")
+    % Wear-levelling layer is active on this media
+    % Filesystem is located on internal SPI FLASH
+    esp32#>
+</pre>
+</p>
+</body>
+</html>

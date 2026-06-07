@@ -1,0 +1,98 @@
+# Newsblog
+
+## 2026
+
+* **30.05.2026** **Release V2.6.9** with npm-based providers bugfix.
+* **18.05.2026** **Release V2.6.8**, a release focused on process providers.  
+* **16.05.2026** **Release V2.6.7** with VS Code meta data and a small bugfix.
+* **14.05.2026** AI.duino is now available at VS Code Marketplace.   
+* **14.05.2026** Release **V2.6.6** with a bugfix for agentic providers and VS Code 
+* **12.05.2026** Release **V2.6.5** with fixed uninstaller and less notifiations.  
+* **07.05.2026** Release **V2.6.4** with a povider tester in the settings.  
+* **05.05.2026** Release **V2.6.3** with a Codex CLI ENAMETOOLONG bug fix (thanks to user Casket Pizza)
+* **02.03.2026** Release **V2.6.1** with an urgent API key bugfix.    
+* **26.02.2026** Release **V2.6.0** with **Agentic Coding** support.  
+* **18.02.2026** V2.6.0 will be released next week!  
+* **14.02.2026** Still working on an annoying bug with process provider (Claude Code and Codex CLI) with Windows 10.
+* **12.02.2026** Release **V2.5.1** with fixes for user detected bugs.  
+* **04.02.2026** German **Make Magazin 1/2026** is out. With a big article about AI.duino!  
+* **27.01.2026** Fixed installer bug to remove previously deployed extensions.       
+* **23.01.2026** New logo and banner for AI.duino to avoid copyright issues.      
+* **20.01.2026** Working heavy on agentic coding integration.    
+* **11.01.2026** Updated provider configs. Mstral changed its key format.  
+* **01.01.2026** Happy new year! V2.6.0 is in progress, but won't be released until March.  
+  
+## 2025
+
+* **24.12.2025** Fixed critical key generation bug. Merry Christmas!
+* **23.12.2025** Fixed addComments locale bug.    
+* **20.12.2025** Fixed load model on startup bug.    
+* **19.12.2025** Fixed LM Studio wrong model selection bug.    
+* **17.12.2025** Added better best cloud provider model detection.    
+* **16.12.2025** Added missing chat button for AskAI.               
+* **11.12.2025** Added aggregator service provider support (Hugging Face, OpenRouter, Fireworks and Together).               
+* **09.12.2025** Added temperature and token settings for agents.               
+* **06.12.2025** Release **V2.5.0-Make** related to the upcoming article in the Make Magazine.             
+* **05.12.2025** Release **V2.5.0** with improved AI temperature handling.             
+* **04.12.2025** Release **V2.4.1** with improved token counting.             
+* **01.12.2025** Release **V2.4.0** with a small but cool improvement and Copy&Paste bugfix.           
+* **18.11.2025** Two week of testing without bugs. Weeee!         
+* **06.11.2025** Release **V2.3.1** with a minor bugfix and updated provider settings.      
+* **26.10.2025** Release **V2.3.0** with feature for adding external files and a code analyzer.      
+* **25.10.2025** V2.3.0 beta. See Changelog.md. Now it needs a lot of testing.    
+* **19.10.2025** Release **V2.2.1** with better http provider support and improved MaxToken managent.  
+* **18.10.2025** Release **V2.2.0** with custom AI agents (cooool!) and bugfixes.  
+* **17.10.2025** Added Custom AI Agents.    
+* **16.10.2025** Release **V2.1.0**: Yes! Fixed the last annoying issue: Changed the toolbar with a context menu!  
+* **14.10.2025** Release **V2.0.1**: Yes, bugfixes. But small - added proper Windows installer.  
+* **13.10.2025** Release **V2.0**. Finaly. Removed old, useless und buggy releases.      
+* **12.10.2025** **V2.0 Beta** is ready for final testing!  
+* **11.10.2025** A lot of work has been done. V2.0 will be released next week, stay tuned.  
+* **10.10.2025** Added Claude Code session persitance. This is indeed a killer feature!   
+* **07.10.2025** New V2 beta with much improvements.  
+* **06.10.2025** Added sponsorship buttons. API keys for testing are costy. *Sight*
+* **05.10.2025** Reworking all features for better usability. V2 is getting closer!  
+* **02.10.2025** Updated SECURITY.md and removed a 'Groq only' bug. Better startup performance.    
+* **01.10.2025** V2.0.0 Beta is ready for testing! With complete feature rework and multiple AI chats.  
+* **29.09.2025** Working on V2. Testing, testing, testing.     
+* **26.09.2025** Release **V1.11.0** with Ollama integration and local provider modularization.  
+* **25.09.2025** Release **V1.10.2** with fixes for two status bar issues.  
+* **25.09.2025** Release **V1.10.1** with full localized and UI optimized Claude Code integration.   
+* **24.09.2025** Release **V1.10.0**. Integraded Claude Code! Use your Pro Plan account in AI.duino for free.  
+* **23.09.2025** Release **V1.9.3**. No bugs found again but localized last hard-coded strings.
+* **22.09.2025** Release **V1.9.2**. No bugs found but removed ~80 unused lines of code.
+* **21.09.2025** New screenshots for the README.md.    
+* **19.09.2025** Release **V1.9.1** with prompt editor safty checks.    
+* **18.09.2025** Release **V1.9.0** with prompt editor and localisazation bugfix and new locales.      
+* **17.09.2025** Release **V1.8.5** with prompt editor bugfix and international prompt history time stamps.    
+* **17.09.2025** Release **V1.8.4** with uninstallers and optical enhancements.    
+* **16.09.2025** Release **V1.8.3** with more refactoring and offline help bugfix. 
+* **16.09.2025** Release **V1.8.2** with user prompt history and new installers.
+* **15.09.2025** Notes on the API keys have been added.
+* **14.09.2025** Release **V1.8.1** with tons of refactorings, code cleanup, new installers and bugfixing.
+* **13.09.2025** Release **V1.8.0** with better IDE integration and configuration files folder.  
+* **12.09.2025** Migrate configuration files to own folder .aiduino.  
+* **11.09.2025** Release **V1.7.0** with update detection and a prompt editor.  
+* **09.09.2025** Bugfix: The first three menu entries are now translated correcty.   
+* **09.09.2025** **V1.6.2** with important ChatGPT bugfix!    
+* **07.09.2025** **V1.6.1** with small bugfixes and new locales bg, hu, sl, sk.
+* **04.09.2025** **V1.6.0** is checking every startup for new *providerConfigs.js*, which will be generated weekly.
+* **03.09.2025** New release **V1.6.0** with better code and enhancements.
+* **02.09.2025** Allmost finished with refactoring. Added Vertex and Hugging Face.
+* **31.08.2025** Started modulariszation for upcoming V1.6.0.   
+* **27.08.2025** Release **V1.5.2** with bugfixes and better error handling.  
+* **15.08.2025** Release **V1.5.1** with a fix for Gemini and three more locales (no, da and fi).
+* **13.08.2025** Release **V1.5** Dynamic AI provider and model integration. Added Perplexity, Cohere and Croq.    
+* **12.08.2025** Release **V1.4.2** with bug fixes and better text rendering.  
+* **11.08.2025** Release **V1.4.1** with auto board detection for prompts and bug fixes.
+* **10.08.2025** Release **V1.4** with new direct AI question function with follow up option.
+* **10.08.2025** Release **V1.3.2** release with several bug fixes and optimizations.  
+* **09.08.2025** Release **V1.3.1** release. Non-IDE languages like sv (Swedish) are now supported and selectable in the plugin menu.   
+* **08.08.2025** Release **V1.3** with l18n support: en, de, fr, it, es, tr, pl, po, el, nl, cs, sv, ja, ko, zh.  
+* **05.08.2025** Release **V1.2** with better code optimization and commenting.  
+* **04.08.2025** Added SECURITY.md.
+* **30.07.2025** **V1.1.1** with Mistral support.  
+* **29.07.2025** **V1.1** release with bugfixes, better error handling and Gemini support.  
+* **28.07.2025** **V1.0** release.  
+* **28.07.2025** Pushed all needed files with added ChatGPT support. Ready to test!
+* **25.07.2025** Initial commit with Linux installer. Stay tuned. Claude is already working fine. Try it!  

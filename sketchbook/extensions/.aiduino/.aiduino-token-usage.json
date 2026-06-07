@@ -1,0 +1,103 @@
+{
+  "daily": "Sun May 31 2026",
+  "claude": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "chatgpt": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "gemini": {
+    "input": 6629,
+    "output": 8872,
+    "cost": 0.024168700000000005
+  },
+  "mistral": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "perplexity": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "cohere": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "groq": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "huggingface": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "fireworks": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "together": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "openrouter": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "claudecode": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "codexcli": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "mistralvibe": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "opencode": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "geminicli": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "groqcode": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "ollama_agentic": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "ollama": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  },
+  "lmstudio": {
+    "input": 0,
+    "output": 0,
+    "cost": 0
+  }
+}

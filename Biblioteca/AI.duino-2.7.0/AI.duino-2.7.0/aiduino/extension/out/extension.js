@@ -1,0 +1,763 @@
+/*
+ * AI.duino
+ * Copyright 2026 Monster Maker
+ * 
+ * Licensed under the Apache License, Version 2.0
+ */
+
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.deactivate = exports.activate = void 0;
+
+// ===== IMPORTS =====
+// Node.js modules
+const vscode = require("vscode");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+// Core modules
+const { UnifiedAPIClient } = require('./core/apiClient');
+const { AgenticClient } = require('./core/agenticClient');
+const { ExecutionStateManager } = require('./core/executionStateManager');
+const { EventManager } = require('./core/eventManager');
+const { CommandRegistry } = require('./core/commandRegistry');
+const TokenManager = require('./core/tokenManager');
+
+// Feature loader configuration - loads features on demand
+const featureLoaders = {
+    explainCode: () => require('./features/explainCode'),
+    improveCode: () => require('./features/improveCode'),
+    addComments: () => require('./features/addComments'),
+    askAI: () => require('./features/askAI'),
+    chatPanel: () => require('./features/chatPanel'),
+    explainError: () => require('./features/explainError'),
+    debugHelp: () => require('./features/debugHelp'),
+    promptEditor: () => require('./features/promptEditor'),
+    customAgents: () => require('./features/customAgents'),
+    analyzeCode: () => require('./features/analyzeCode'),
+};
+const inlineCompletion = require('./features/inlineCompletion/completionProvider');
+
+// Feature cache - loaded features are cached here
+const loadedFeatures = {};
+
+// Utility modules
+const uiTools = require('./utils/ui');
+const networkUtils = require('./utils/network');
+const errorHandling = require('./utils/errorHandling');
+const validation = require('./utils/validation');
+const fileManager = require('./utils/fileManager');
+const apiManager = require('./utils/apiManager');
+const configUpdater = require('./utils/configUpdater');
+const { ErrorChecker } = require('./utils/errorChecker');
+const { ApiKeyManager } = require('./utils/apiKeyManager');
+const { LocaleUtils } = require('./utils/localeUtils');
+const { PromptManager } = require('./utils/promptManager');
+const { checkExtensionUpdate } = require('./utils/updateChecker');
+const { StatusBarManager } = require('./utils/statusBarManager');
+const { PromptHistoryManager } = require('./utils/promptHistory');
+const { buildMenuItems } = require('./utils/menuBuilder');
+const { disposeCache } = require('./features/inlineCompletion/completionCache');
+const { showSettings } = require('./utils/panels/settingsPanel');
+const providerTestPanel = require('./utils/panels/providerTestPanel');
+
+// Configuration modules
+const { LANGUAGE_METADATA, getLanguageInfo } = require('./config/languageMetadata');
+const { SettingsManager } = require('./config/settings');
+
+// ===== CONSTANTS =====
+const AIDUINO_DIR = path.join(os.homedir(), '.aiduino');
+const EXTENSION_VERSION = fileManager.getVersionFromPackage();
+const MODEL_FILE = path.join(AIDUINO_DIR, '.aiduino-model');
+const TOKEN_USAGE_FILE = path.join(AIDUINO_DIR, '.aiduino-token-usage.json');
+
+// ===== GLOBAL VARIABLES =====
+// Core system state
+let globalContext;
+let currentModel = 'claude';
+let currentLocale = 'en';
+let i18n = {};
+let isPromptEditorOpen = false;
+let promptEditorHasChanges = false;
+
+// Module instances
+let commandRegistry;
+let errorChecker;
+let apiKeyManager;
+let localeUtils;
+let promptManager;
+let statusBarManager;
+let quickMenuTreeProvider;
+let executionStates;
+let eventManager;
+let promptHistory;
+let settingsManager;
+let apiClient;
+let agenticClient;
+let tokenManager;
+
+// Single instance of model manager
+let configData;
+let minimalModelManager;
+let REMOTE_CONFIG_URL;
+
+// Data stores
+const apiKeys = {};
+let aiConversationContext = {
+    lastQuestion: null,
+    lastAnswer: null,
+    lastCode: null,
+    timestamp: null
+};
+
+/**
+ * Load feature on demand with caching
+ * @param {string} featureName - Name of the feature to load
+ * @returns {Object} Loaded feature module
+ */
+function loadFeature(featureName) {
+    if (!loadedFeatures[featureName]) {
+        loadedFeatures[featureName] = featureLoaders[featureName]();
+    }
+    return loadedFeatures[featureName];
+}
+
+// ===== MINIMAL MODEL MANAGER CLASS =====
+
+/**
+ * Minimal dynamic model system for AI.duino
+ * Works completely in background, only shows latest model in statusbar
+ */
+class MinimalModelManager {
+    constructor(providers = null) {
+        this.providers = providers || {}; // Fallback to empty object
+    }
+
+    /**
+     * Get provider info for status bar
+     * @param {string} providerId - Provider identifier
+     * @returns {Object} Provider information
+     */
+    getProviderInfo(providerId) {
+        const provider = this.providers[providerId];
+        if (!provider) {
+            return {
+                name: 'Unknown',
+                icon: 'Ã¢"',
+                color: '#999999',
+                modelName: 'Unknown',
+                modelId: 'unknown',
+                hasApiKey: false
+            };
+        }
+        
+        // Read actual saved model from keyFile
+        let modelName = this.cleanName(provider.fallback);
+        let modelId = provider.fallback;
+        try {
+            const keyFile = path.join(AIDUINO_DIR, provider.keyFile);
+            if (fs.existsSync(keyFile)) {
+                const saved = fs.readFileSync(keyFile, 'utf8').trim();
+                if (saved.includes('|')) {
+                    const parts = saved.split('|');
+                    modelId = parts[parts.length - 1];
+                    modelName = this.cleanName(modelId);
+                }
+            }
+        } catch (e) { /* use fallback */ }
+
+        return {
+            name: provider.name,
+            icon: provider.icon,
+            color: provider.color,
+            modelName: modelName,
+            modelId: modelId,
+            hasApiKey: this.hasApiKey(providerId),
+            isLatest: true
+        };
+    }
+
+    /**
+     * Get current model info for provider (compatibility method)
+     * @param {string} providerId - Provider identifier
+     * @returns {Object} Model information
+     */
+    getCurrentModel(providerId) {
+        const provider = this.providers[providerId];
+        if (!provider) {
+            return { id: 'unknown', name: 'Unknown', isFallback: true };
+        }
+
+        let modelId = provider.fallback;
+        try {
+            const keyFile = path.join(AIDUINO_DIR, provider.keyFile);
+            if (fs.existsSync(keyFile)) {
+                const saved = fs.readFileSync(keyFile, 'utf8').trim();
+                if (saved.includes('|')) {
+                    modelId = saved.split('|').pop();
+                }
+            }
+        } catch (e) { /* use fallback */ }
+
+        return {
+            id: modelId,
+            name: this.cleanName(modelId),
+            isFallback: false
+        };
+    }
+
+    /**
+    * Check if provider has API key configured
+     * @param {string} providerId - Provider identifier  
+     * @returns {boolean} True if API key exists or local provider
+     */
+    hasApiKey(providerId) {
+        if (!this.providers[providerId]) return false;
+        const keyFile = path.join(AIDUINO_DIR, this.providers[providerId].keyFile);
+        return fs.existsSync(keyFile);
+    }
+
+    /**
+     * Clean model names for display
+     * @param {string} rawName - Raw model name
+     * @returns {string} Cleaned display name
+     */
+    cleanName(rawName) {
+        return rawName
+            .replace(/^models\//, '')
+            .replace(/-/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+    }
+}
+
+// ===== LOCALE MANAGEMENT =====
+
+/**
+ * Load and initialize locale based on user settings (async)
+ */
+async function loadLocaleAsync() {
+    const config = vscode.workspace.getConfiguration('aiduino');
+    const userLanguageChoice = config.get('language', 'auto');
+    
+    if (userLanguageChoice !== 'auto') {
+        currentLocale = userLanguageChoice;
+    } else {
+        const vscodeLocale = vscode.env.language || 'en';
+        currentLocale = localeUtils.autoDetectLocale(vscodeLocale);
+    }
+    
+    const localeFile = path.join(__dirname, '..', 'locales', `${currentLocale}.json`);
+    const fallbackFile = path.join(__dirname, '..', 'locales', 'en.json');
+    const fileToTry = fs.existsSync(localeFile) ? localeFile : fallbackFile;
+    
+    if (fs.existsSync(fileToTry)) {
+        try {
+            const content = await fs.promises.readFile(fileToTry, 'utf8');
+            i18n = JSON.parse(content);
+        } catch {
+            currentLocale = 'en';
+            i18n = {
+                commands: { quickMenu: "Open Quick Menu" },
+                messages: { selectAction: "What would you like to do?" },
+                buttons: { cancel: "Cancel" }
+            };
+        }
+    } else {
+        currentLocale = 'en';
+        i18n = {
+            commands: { quickMenu: "Open Quick Menu" },
+            messages: { selectAction: "What would you like to do?" },
+            buttons: { cancel: "Cancel" }
+        };
+    }
+}
+
+/**
+ * Get localized string with parameter replacement
+ * @param {string} key - Translation key (dot notation)
+ * @param {...any} args - Arguments for string replacement
+ * @returns {string} Localized string
+ */
+function t(key, ...args) {
+    const keys = key.split('.');
+    let value = i18n;
+    
+    for (const k of keys) {
+        if (value && typeof value === 'object' && k in value) {
+            value = value[k];
+        } else {
+            return key; // Return key as fallback
+        }
+    }
+    
+    if (typeof value === 'string' && args.length > 0) {
+        return value.replace(/{(\d+)}/g, (match, index) => {
+            return args[parseInt(index)] || match;
+        });
+    }
+    
+    return value;
+}
+
+/**
+ * Switch UI language with user selection
+ */
+async function switchLanguage() {
+    // Check if already running
+    if (!executionStates.start(executionStates.OPERATIONS.SWITCH_LANGUAGE)) {
+        vscode.window.showInformationMessage(t('messages.operationAlreadyRunning'));
+        return;
+    }
+    
+    try {
+        if (isPromptEditorOpen && promptEditorHasChanges) {
+            const choice = await vscode.window.showWarningMessage(
+                t('promptEditor.unsavedWarning'),
+                t('buttons.yes'),    
+                t('buttons.cancel') 
+            );
+    
+            if (choice !== t('buttons.yes')) {
+                return;
+            }
+            promptEditorHasChanges = false;
+        }
+            
+        const config = vscode.workspace.getConfiguration('aiduino');
+        const currentSetting = config.get('language', 'auto');
+        
+        // Use LocaleUtils for building language selection
+        const availableLanguages = localeUtils.buildLanguagePickItems(currentLocale, currentSetting, t);
+        
+        const selected = await vscode.window.showQuickPick(availableLanguages, {
+            placeHolder: t('language.selectLanguage') || 'Choose language for AI.duino',
+            title: `🌍 AI.duino ${t('language.changeLanguage') || 'Change Language'}`
+        });
+        
+        if (selected && selected.value !== currentSetting) {
+            await config.update('language', selected.value, vscode.ConfigurationTarget.Global);
+            
+            if (selected.value === 'auto') {
+                const vscodeLocale = vscode.env.language || 'en';
+                currentLocale = localeUtils.autoDetectLocale(vscodeLocale);
+            } else {
+                currentLocale = selected.value;
+            }
+            
+            await loadLocaleAsync();
+            promptManager.initialize(i18n, currentLocale); 
+            statusBarManager.updateFromContext(getDependencies());;
+
+            if (quickMenuTreeProvider) {
+                quickMenuTreeProvider.refresh();
+            }
+
+            if (isPromptEditorOpen) {
+                vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                isPromptEditorOpen = false; 
+            }
+            
+            const successMessage = selected.value === 'auto' ? 
+                t('language.changed', `Auto (${getLanguageInfo(currentLocale).name})`) :
+                t('language.changed', getLanguageInfo(currentLocale).name);
+            vscode.window.showInformationMessage(successMessage);
+        }
+    } finally {
+        executionStates.stop('switchLanguage');
+    }
+}
+
+// ===== ERROR CHECKING =====
+
+/**
+ * Wrapper for error checking (delegates to ErrorChecker)
+ * @param {boolean} silent - If true, don't show status updates
+ * @returns {boolean} True if errors found
+ */
+async function checkForErrors(silent = true) {
+    if (!errorChecker) return false;
+    
+    const hasErrors = await errorChecker.checkForErrors(silent);
+    
+    // Handle status bar updates here (where they belong)
+    if (hasErrors && !silent) {
+        const errorCount = errorChecker.getErrorStatus().lastDiagnosticsCount;
+        const providerInfo = minimalModelManager.getProviderInfo(currentModel);
+        statusBarManager.showErrorState(errorCount, t, providerInfo);
+        
+        // Auto-clear after 5 seconds
+        setTimeout(() => {
+            const currentStatus = errorChecker.getErrorStatus();
+            if (currentStatus.lastDiagnosticsCount === 0) {
+                statusBarManager.updateFromContext(getDependencies());;
+            }
+        }, 5000);
+    } else if (!hasErrors) {
+        statusBarManager.updateFromContext(getDependencies());;
+    }
+    
+    return hasErrors;
+}
+
+// ===== CORE FUNCTIONS =====
+
+/**
+ * Main activation function - entry point for the extension
+ * 
+ * @param {vscode.ExtensionContext} context - VS Code extension context
+ */
+async function activate(context) {        
+    // Prevent multiple simultaneous activations
+    if (globalContext) {
+        return;
+    }  
+
+    // Store context globally
+    globalContext = context;
+    settingsManager = new SettingsManager(context);
+    apiClient = new UnifiedAPIClient({ settings: settingsManager }); 
+    agenticClient = new AgenticClient({ settings: settingsManager });
+
+    // Generate AI.duino folder and migrate files
+    if (!fs.existsSync(AIDUINO_DIR)) {
+        fs.mkdirSync(AIDUINO_DIR, { mode: 0o700 });
+        fileManager.migrateOldFiles(AIDUINO_DIR);
+    }
+    // Initialize config and model manager first
+    configData = configUpdater.loadProviderConfigs();
+    const { REMOTE_CONFIG_URL: remoteUrl } = require('./config/providerConfigs');
+    REMOTE_CONFIG_URL = remoteUrl;
+    minimalModelManager = new MinimalModelManager(configData.providers);  
+
+    // Initialize Locale Utils first
+    localeUtils = new LocaleUtils();
+    
+    // Initialize Token Manager EARLY (before EventManager needs it)
+    tokenManager = new TokenManager(TOKEN_USAGE_FILE, null);  // eventManager noch null
+    tokenManager.initialize(minimalModelManager.providers);
+    tokenManager.load();
+    
+    // Initialize EventManager AFTER TokenManager exists
+    eventManager = new EventManager({ settings: settingsManager });
+    eventManager.initialize({
+        updateStatusBar: () => statusBarManager?.updateFromContext(getDependencies()),
+        onConfigChange: () => {}
+    });
+    
+    // Update tokenManager with eventManager reference
+    tokenManager.eventManager = eventManager;
+    
+    // Async loading
+    await Promise.all([
+        (async () => {
+            const keys = await fileManager.loadAllApiKeysAsync(minimalModelManager.providers);
+            Object.assign(apiKeys, keys);
+
+            // Load saved model selection
+            const savedModel = await fileManager.loadSelectedModelAsync(minimalModelManager.providers);
+            if (savedModel) {
+                currentModel = savedModel;
+            }
+            
+            // Note: Model selection is now handled interactively when user switches providers
+            // No automatic model detection on startup - users choose their preferred model
+        })(),
+        // Load locale configuration
+        loadLocaleAsync()
+    ]);
+
+    // Prompt manager
+    promptManager = new PromptManager();
+    promptManager.initialize(i18n, currentLocale); 
+
+    // Initialize Prompt History Manager
+    promptHistory = new PromptHistoryManager();
+    promptHistory.updateSettings(settingsManager);
+    
+    // Initialize and show status bar
+    statusBarManager = new StatusBarManager();
+    statusBarManager.createStatusBar();
+    statusBarManager.updateFromContext(getDependencies());
+
+    // Initialize Quick Menu Tree Provider
+    quickMenuTreeProvider = new uiTools.QuickMenuTreeProvider();
+    quickMenuTreeProvider.initialize(getDependencies());
+    const treeView = vscode.window.createTreeView('aiduino.quickMenuView', {
+        treeDataProvider: quickMenuTreeProvider,
+        showCollapseAll: false
+    });
+    context.subscriptions.push(treeView);
+
+    // Initialize core managers
+    errorChecker = new ErrorChecker();
+    apiKeyManager = new ApiKeyManager();
+    executionStates = new ExecutionStateManager();
+  
+    // Auto-Update for providers 
+    setTimeout(() => {
+        configUpdater.setupAutoUpdates(getDependencies());
+    }, 3000);
+
+    // Check for extension updates
+    if (settingsManager.get('autoCheckExtensionUpdates')) {
+        setTimeout(() => {
+            checkExtensionUpdate(EXTENSION_VERSION, t, globalContext);
+        }, 5000);
+    }
+
+    // Register all commands
+    registerCommands(context);
+
+    // Check for NOTES.ino when extension activates with a .ino file open
+    const activeEditor = vscode.window.activeTextEditor;
+
+    if (activeEditor && activeEditor.document.fileName.endsWith('.ino')) {
+        const sketchDir = path.dirname(activeEditor.document.uri.fsPath);
+    
+        setTimeout(() => {
+            fileManager.checkAndPromptForNotes(sketchDir, t, settingsManager);  // <- settingsManager übergeben!
+        }, 3000);
+    }
+
+    // Initialize inline completion (only activates if enabled in settings)
+
+    // Initialize inline completion (only activates if enabled in settings)
+    inlineCompletion.registerInlineCompletion(getDependencies())
+        .then(() => {
+            // Successful initialization (or disabled in settings)
+        })
+        .catch(err => {
+            // Silent catch
+        }
+    );
+    
+    // Show welcome message if needed
+    if (uiTools.shouldShowWelcome(getDependencies())) {
+        setTimeout(async () => {
+            await uiTools.showWelcomeMessage(getDependencies());
+        }, 2000);
+    }
+}
+
+/**
+ * Register all extension commands using CommandRegistry
+ * @param {vscode.ExtensionContext} context - VS Code extension context
+ */
+function registerCommands(context) {
+    // Initialize Command Registry
+    commandRegistry = new CommandRegistry();
+    
+    // Prepare dependencies for command handlers
+    const commandDeps = {
+        // Handler functions
+        showQuickMenu,
+        switchModel: () => apiManager.switchModel(getDependencies()),
+        setApiKey: () => apiManager.setApiKey(getDependencies()),
+        setNodePath: () => apiManager.setNodePath(getDependencies()),
+        switchLanguage,
+        clearAIContext,
+        showSettings: (context, openCategory) => showSettings(context || getDependencies(), openCategory),
+        showProviderTestPanel: (context) => providerTestPanel.showProviderTestPanel(context || getDependencies()),
+    
+        // Feature loader for lazy loading
+        loadFeature,
+    
+        setPromptEditorOpen: (isOpen) => { isPromptEditorOpen = isOpen; },
+        uiTools,
+        inlineCompletion,
+    
+        // System dependencies
+        minimalModelManager,
+        getDependencies
+    };
+    
+    // Register all commands
+    commandRegistry.registerCommands(context, commandDeps);
+}
+
+/**
+ * Dependency factory for feature modules
+ * Provides all necessary dependencies in a centralized way
+ * @returns {Object} Dependencies object
+ */
+function getDependencies() {
+    return {
+        // Core functions
+        t,
+        callAI: (prompt, contextOverride) => apiManager.callAI(prompt, contextOverride || getDependencies()),
+        handleApiError: (error) => errorHandling.handleApiError(error, getDependencies()),
+        
+        // System configuration
+        currentModel,
+        currentLocale,
+        globalContext,
+        settings: settingsManager, 
+        EXTENSION_VERSION,
+        REMOTE_CONFIG_URL,
+        
+        // Data stores
+        apiKeys,
+        tokenUsage: tokenManager ? tokenManager.getUsage() : {},
+        aiConversationContext,
+        
+        // Manager instances
+        minimalModelManager,
+        executionStates,
+        localeUtils,
+        promptManager,
+        promptHistory,
+        apiKeyManager,
+        quickMenuTreeProvider,
+        tokenManager,
+        
+        // Core clients/services
+        apiClient,
+        agenticClient,
+        fileManager,
+        validation,
+        
+        // UI functions
+        updateStatusBar: () => statusBarManager.updateFromContext(getDependencies()),
+        setPromptEditorChanges: (hasChanges) => { promptEditorHasChanges = hasChanges; },
+        showSupportHint: () => uiTools.showSupportHint(globalContext), 
+        
+        // API functions
+        switchModel: () => apiManager.switchModel(getDependencies()),
+        
+        // State setters (callbacks)
+        setCurrentModel: (newModel) => { 
+            currentModel = newModel; 
+            if (statusBarManager) {
+               statusBarManager.updateFromContext(getDependencies());
+            }
+        },
+        setAiConversationContext: (newContext) => { 
+            Object.assign(aiConversationContext, newContext); 
+        }
+    };
+}
+
+// ===== UI FUNCTIONS =====
+
+/**
+ * Show main quick menu with all available actions
+ */
+async function showQuickMenu() {
+    const model = minimalModelManager.providers[currentModel];
+    const hasApiKey = minimalModelManager.hasApiKey(currentModel); 
+
+    // Check API key first
+    if (!hasApiKey) {
+        const isLocal = model.type === 'local';
+        const message = isLocal ? 
+            t('messages.noPath', model.name) : 
+            t('messages.noApiKey', model.name);
+    
+        const choice = await vscode.window.showWarningMessage(
+            message,
+            t('buttons.setupNow'),
+            t('buttons.switchModel'),
+            t('buttons.cancel')
+        );
+        if (choice === t('buttons.setupNow')) {
+            await apiManager.setApiKey(getDependencies());
+        } else if (choice === t('buttons.switchModel')) {
+            await apiManager.switchModel(getDependencies());
+        }
+        return;
+    }
+    
+    // Build and show menu
+    const items = buildMenuItems(getDependencies());
+    
+    const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: t('messages.selectAction'),
+        title: `🤖 AI.duino v${EXTENSION_VERSION} (${model.name})`
+    });
+    
+    if (selected && selected.command) {
+        vscode.commands.executeCommand(selected.command);
+    }
+}
+
+/**
+ * Clear AI conversation context wrapper
+ */
+function clearAIContext() {
+    Object.assign(aiConversationContext, fileManager.clearAIContext());
+    vscode.window.showInformationMessage(t('messages.contextCleared'));
+}
+
+// ===== CLEANUP & DEACTIVATION =====
+
+/**
+ * Extension deactivation with comprehensive cleanup
+ * Ensures all resources are properly disposed of
+ */
+function deactivate() {
+    // Cleanup command registry
+    commandRegistry.dispose();
+    commandRegistry = null;
+
+    // Cleanup error checker
+    errorChecker.dispose();
+    errorChecker = null;
+    
+    // Cleanup execution states
+    executionStates.states.clear();
+
+    // Cleanup locale utils
+    localeUtils = null;
+
+    // Cleanup API key manager
+    apiKeyManager.dispose();
+    apiKeyManager = null;
+    
+    // Force final save if queue has pending items
+    // Emergency save without complex queue logic
+    const data = JSON.stringify(tokenUsage, null, 2);
+    fs.writeFileSync(TOKEN_USAGE_FILE, data, { mode: 0o600 });
+
+    // Cleanup event manager
+    eventManager.dispose();
+    eventManager = null;
+    
+    // Cleanup status bar manager
+    statusBarManager.dispose();
+    statusBarManager = null;
+
+    // Cleanup tree provider
+    quickMenuTreeProvider = null;
+
+    // Cleanup Arduino Board Context
+    shared.disposeBoardContext(); 
+    
+    // Clear global references to prevent memory leaks
+    globalContext = null;
+
+    // Cleanup inline completion cache
+    disposeCache();
+
+    // Cleanup prompt manager
+    if (promptManager) {
+        promptManager = null;
+    }
+
+    if (promptHistory) {
+        promptHistory.saveHistory(); // Final saving
+        promptHistory = null;
+    }
+
+    // Clear AI conversation context
+    aiConversationContext = {
+        lastQuestion: null,
+        lastAnswer: null,
+        lastCode: null,
+        timestamp: null
+    };
+}
+
+// ===== EXPORTS =====
+exports.activate = activate;
+exports.deactivate = deactivate;
