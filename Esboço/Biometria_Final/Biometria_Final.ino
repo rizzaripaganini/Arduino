@@ -81,6 +81,8 @@ const int RELE_PD8 = 5;
 #define RELAY_ARMADO LOW
 #define RELAY_DESARRMADO HIGH
 
+bool biometria_livre_para_leitura = true;
+
 void setup() {
   Serial.begin(115200);
 
@@ -99,16 +101,19 @@ void setup() {
 }
 
 void loop() {
+  delay(1000);
   // Lê o estado atual do pino do leitor Suprema
   int ESTADO_DO_LEITOR = digitalRead(BIOMETRIA_NA);
   int ESTADO_DO_RELAY = digitalRead(RELE_PD8);
 
-  if (ESTADO_DO_LEITOR == BIOMETRIA_LIBERADA) {
+  if (biometria_livre_para_leitura == true && ESTADO_DO_LEITOR == BIOMETRIA_LIBERADA) {
     Serial.println("Biometria liberada!!!");
+    biometria_livre_para_leitura = false;
     digitalWrite(BIOMETRIA_NA, BIOMETRIA_NAO_LIBERADA);
     digitalWrite(RELE_PD8, RELAY_DESARRMADO);
 
     delay(5000);
     digitalWrite(RELE_PD8, RELAY_ARMADO);
+    biometria_livre_para_leitura = true;
   }
 }
