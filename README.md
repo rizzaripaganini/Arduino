@@ -1,5 +1,4 @@
 https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
-http://adelino.cc/package_adelino_index.json
 https://raw.githubusercontent.com/akafugu/akafugu_core/master/package_akafugu_index.json
 https://raw.githubusercontent.com/arachnidlabs/arachnidlabs-boards/master/package_arachnidlabs.com_boards_index.json
 http://www.leonardomiliani.com/repository/package_leonardomiliani.com_index.json
