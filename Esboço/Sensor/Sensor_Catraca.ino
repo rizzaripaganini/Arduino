@@ -1,61 +1,37 @@
-const int SENSOR_01 = 6;
-const int SENSOR_02 = 7;
-const int LED_01 = 5;
-const int LED_02 = 4;
 
-
-#define SENSOR_ESTADO_TRAVADO LOW
-#define SENSOR_ESTADO_LIBERADO HIGH
-#define LED_01 HIGH
-#define LED_02 HIGH
-
-int ULTIMO_ESTADO_S1;
-int ULTIMO_ESTADO_S2;
-int APAGADO;
-int LIGADO;
+int SENSOR_01 = 0;  // Sensor 1 
+int SENSOR_02 = 1;  // Sensor 2
+const int RELE = 8;    // Rele
 
 void setup() {
-  Serial.begin(115200);
-  pinMode(SENSOR_01, INPUT_PULLUP);
-  pinMode(SENSOR_02, INPUT_PULLUP);
-  pinMode(LED_01, OUTPUT);
-  pinMode(LED_02, OUTPUT);
+  pinMode(SENSOR_01, INPUT_PULLUP); 
+  pinMode(SENSOR_02, INPUT_PULLUP); 
+  pinMode(RELE, OUTPUT); 
+  Serial.begin(115200); 
 
-  ULTIMO_ESTADO_S1 = digitalRead(SENSOR_01);
-  ULTIMO_ESTADO_S2 = digitalRead(SENSOR_02);
+  digitalWrite(RELE, LOW);        
 }
 
 void loop() {
-  int ESTADO_S1 = digitalRead(SENSOR_01);
-  int ESTADO_S2 = digitalRead(SENSOR_02);
+  double ESTADO_S1 = analogRead(SENSOR_01); 
+  double ESTADO_S2 = analogRead(SENSOR_02);
 
-  // Switch para o Sensor 01
-  switch (ESTADO_S1) {
-    case HIGH: // Equivalente a > 0
-      Serial.print(" S1: ");
-      Serial.print(ESTADO_S1 );
-
-      break;
-      
-    case LOW:  // Equivalente a == 0
-      Serial.print(" S1: ");
-      Serial.print(ESTADO_S1 );
-      Serial.println("   ");
-      break;
+  //Serial.println(ESTADO_S1);
+  //Serial.println("NÂO ACIONADO ...");
+   // Lógica para acionar o relé
+  if (ESTADO_S1 == 20.0) { // Se qualquer sensor detectar um obstáculo (LOW)
+    Serial.println("S1 ACIONADO....");
+    Serial.println(ESTADO_S1);
+    digitalWrite(RELE, HIGH);
+    delay(500); 
   }
 
-  // Switch para o Sensor 02
-  switch (ESTADO_S2) {
-    case HIGH: // Equivalente a > 0
-      Serial.print(" S2: ");
-      Serial.print(ESTADO_S2 );
-      Serial.println("   ");
-      break;
-      
-    case LOW:  // Equivalente a == 0
-      Serial.print(" S2: ");
-      Serial.print(ESTADO_S2 );
-      
-      break;
+   // Lógica para acionar o relé
+  if (ESTADO_S2 == 20.0) { // Se qualquer sensor detectar um obstáculo (LOW)
+    Serial.println("S2 ACIONADO....");
+    Serial.println(ESTADO_S2);
+    digitalWrite(RELE, HIGH);
+    delay(500); 
   }
+  //delay(2000);
 }
