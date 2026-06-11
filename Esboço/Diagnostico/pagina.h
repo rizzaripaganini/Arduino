@@ -1,0 +1,21 @@
+#include <pgmspace.h>
+const char pagina_html[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel ESP32</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        h1 { color: #007BFF; }
+        .botao { padding: 10px 20px; font-size: 18px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Olá do ESP32!</h1>
+    <p>Trabalhando o código HTML separado e organizado.</p>
+    <button class="botao" onclick="alert('Botão clicado!')">Clique Aqui</button>
+</body>
+</html>
+)=====";
