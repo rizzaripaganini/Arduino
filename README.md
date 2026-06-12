@@ -1,6 +1,3 @@
-465804931172
-7eb3b70c98f19b5b60a8706409f89d0a
-
 ##Repositorios  Arduino IDE
 
 http://www.leonardomiliani.com/repository/package_leonardomiliani.com_index.json
